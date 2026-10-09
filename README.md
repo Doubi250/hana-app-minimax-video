@@ -103,19 +103,15 @@ App 不向上述以外的任何主机发起请求，也不启动任何本地服�
 图生视频与多模态参考互斥（由模式天然隔离）。比例：除文生视频外一律 `adaptive`
 （i2v / 首尾帧由输入图决定；多模态参考缺省 `adaptive`，也可显式指定）。
 
-## 6. 出问题时先看这里
+## 6. 常见问题
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | provider 不出现 | `app/media.provide` 未授权，或媒体运行时未就绪 | 去 设置 → 应用 → 应用权限 批准后重载 App |
-| 生成报「未取得 MiniMax 凭证…」 | MiniMax Token Plan 未配置，或未授权 `app/provider.credentials.read` | 见 §3 |
 | 报「参考素材超出传输限制」 | 参考图/视频/音频过大 | 压缩到单文件 ≤12MB、总量 ≤16MB（详见 [docs/known-limitations.md](docs/known-limitations.md)） |
 | 任务成功但一直 pending | 后台下载进行中（分片下载 + 轮询回传） | 再等几轮；连续 3 次下载失败才判失败 |
-| 下载超时 | CDN 不支持 Range 或单次 RPC 超过 30 秒 | 稍后重试；或改用更小的输出设置 |
-| 下载失败：`Plugin network.fetch host "…" is not declared in manifest network.allowedHosts` | 该域名未列入 `network.allowedHosts`（如 CDN 域名变更） | 升级到含该域名的版本；若仍出现，把报错中的 host 加进 manifest 白名单后重打包重装 |
-| 任务成功但产物一直没出现在媒体库（下载失败） | 网络白名单、超时等导致下载未完成 | 先升级到最新版本；对远端已完成的任务，可用仓库里的 [docs/user-scripts.md](docs/user-scripts.md) 所述脚本直接找回 |
-| 面板显示灰色/「未配置」 | MiniMax Token Plan 未配置或 key 已失效（机制见 [docs/credential-mechanism.md](docs/credential-mechanism.md)） | 在 设置 → 供应商 里配好 Token Plan，刷新面板即可恢复 |
-| 面板显示 `no credentials` | provider 的 `authType` 被改回了 `api-key`（本版要求 `none`） | 确认 manifest 里 `providers[].authType` 为 `none` 后重装 |
+| 下载超时，或任务成功但产物一直没出现在媒体库 | 网络波动、CDN 不支持分段、或单次 RPC 超过 30 秒 | 稍后重试；若仍失败且远端任务已完成，用 [docs/user-scripts.md](docs/user-scripts.md) 的脚本直接找回 |
+| 面板灰色/「未配置」，或生成报「未取得 MiniMax 凭证…」 | MiniMax Token Plan 未配置 / key 失效，或未授权 `app/provider.credentials.read` | 在 设置 → 供应商 里配好 Token Plan，确认已授权该能力，刷新面板即恢复（见 §3） |
 
 ## 7. 更多文档
 
