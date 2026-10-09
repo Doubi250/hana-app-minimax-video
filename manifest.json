@@ -1,0 +1,48 @@
+{
+  "manifestVersion": 2,
+  "id": "minimax-video",
+  "name": "MiniMax 视频生成",
+  "version": "0.1.7",
+  "minAppVersion": "0.978.0",
+  "description": "把 MiniMax H3 视频生成（文生视频 / 图生视频 / 多模态参考）接入 Hana 媒体系统，凭证取自本机的 MiniMax Token Plan 供应商。",
+  "entry": "index.mjs",
+  "icon": "assets/icon.svg",
+  "capabilities": [
+    "app/media.provide",
+    "app/resources.read",
+    "app/provider.credentials.read"
+  ],
+  "network": {
+    "allowedHosts": [
+      "api.minimax.cn",
+      "*.minimax.cn",
+      "*.hailuoai.com",
+      "*.minimax.chat",
+      "*.minimaxi.com",
+      "*.minimax.io",
+      "*.aliyuncs.com"
+    ],
+    "methods": ["GET", "POST"],
+    "defaultTimeoutMs": 30000,
+    "maxResponseBytes": 536870912
+  },
+  "contributes": {
+    "providers": [
+      {
+        "id": "minimax-video",
+        "displayName": "MiniMax 视频",
+        "authType": "none",
+        "capabilities": {
+          "chat": {
+            "projection": "none",
+            "runtimeProviderId": "minimax-video",
+            "displayProviderId": "minimax-video"
+          },
+          "media": {
+            "videoGeneration": { "models": [] }
+          }
+        }
+      }
+    ]
+  }
+}

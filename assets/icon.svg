@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="MiniMax 视频生成">
+  <defs>
+    <linearGradient id="mmv-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4C6FFF"/>
+      <stop offset="1" stop-color="#8B3DFF"/>
+    </linearGradient>
+    <linearGradient id="mmv-glow" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" ry="28" fill="url(#mmv-bg)"/>
+  <circle cx="64" cy="64" r="34" fill="url(#mmv-glow)"/>
+  <circle cx="64" cy="64" r="34" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="2"/>
+  <path d="M55 46 L55 82 L85 64 Z" fill="#FFFFFF"/>
+  <rect x="22" y="104" width="84" height="6" rx="3" ry="3" fill="#FFFFFF" fill-opacity="0.28"/>
+</svg>

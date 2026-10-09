@@ -1,0 +1,14 @@
+# Packaging artifacts (built via hana-app-creator pack_app.mjs, delivered separately)
+dist/
+*.zip
+*.entry.json
+
+node_modules/
+__pycache__/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
