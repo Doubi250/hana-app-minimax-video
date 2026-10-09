@@ -1,0 +1,12 @@
+#!/bin/sh
+# Pre-commit guard for this repository. Activate once per clone:
+#   git config core.hooksPath .githooks
+#
+# Runs the machine-specific leak scan (scripts/check-clean.mjs) and the
+# offline unit suite. Both must pass; the commit is rejected otherwise.
+# Bypass deliberately only when you must: git commit --no-verify
+set -e
+
+echo "pre-commit: check-clean + unit tests"
+node scripts/check-clean.mjs
+node --test tests/*.test.mjs

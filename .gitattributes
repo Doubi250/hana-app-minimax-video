@@ -1,0 +1,2 @@
+# Keep shell hooks LF so they run under POSIX sh on every platform.
+.githooks/* text eol=lf
