@@ -2,6 +2,22 @@
 
 本 App 的所有重要变更记录在此文件。版本遵循 [SemVer](https://semver.org/)。
 
+## [Unreleased]
+
+### 修正
+
+- **下载状态内存泄漏**：媒体适配器的下载状态表 `downloads` 原来只增不删，长跑进程下会持续堆积。现加入终态 TTL 回收（默认 5 分钟）+ 上限淘汰（256 条，只淘汰已结算条目，在飞下载永不淘汰）+ 磁盘存在性检查（成品已落盘时直接复用，不重下）。修复后状态表内存有界。
+
+### 变更
+
+- 新增 `scripts/check-clean.mjs` 与 `.githooks/pre-commit`（本地泄漏守卫）：提交前扫描 tracked 文件中的本机路径 / 密钥形态，命中即拒绝提交，并同时跑离线单测。
+- `lib/minimax-api.mjs`：删除从未被读取的 `budget.knownSizes` 字段（死代码）。
+- `lib/minimax-adapter.mjs`：为「排除指向自身的凭证 provider 提示」补注释，说明当前无自填 key 通道、若将来增加需重审。
+
+### 测试
+
+- 新增 `tests/download-state.test.mjs`（9 条下载状态机生命周期用例）。全套 **55/55**。
+
 ## [0.1.7] - 2026-10-09
 
 ### 修正
