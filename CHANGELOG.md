@@ -4,19 +4,25 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **2K 视频再生成**：`MiniMax-H3` 新增 `regeneration` 模式（「2K 再生成」）——把已生成的 768P 成片升级为 2K。两种输入二选一：`source_task_id`（需 MiniMax 白名单；源任务属本账号且 `succeeded`、7 天内；零字节上传）或 `base_video`（源视频经 `video` 参数传入，须重现原 prompt 与素材，受传输预算约束）。成品照常经下载 / 发布管线落入媒体库。
+- **H3-Context-IR 增强提示词工具**：新增模型工具 `minimax_context_ir`——异步提交提示词增强任务（首 / 尾帧与参考素材二选一互斥），立即返回「已提交」，增强后的提示词在后台完成时自动送达会话，可直接用于后续生成或再生成。
+
 ### 修正
 
 - **下载状态内存泄漏**：媒体适配器的下载状态表 `downloads` 原来只增不删，长跑进程下会持续堆积。现加入终态 TTL 回收（默认 5 分钟）+ 上限淘汰（256 条，只淘汰已结算条目，在飞下载永不淘汰）+ 磁盘存在性检查（成品已落盘时直接复用，不重下）。修复后状态表内存有界。
 
 ### 变更
 
+- manifest 新增三项能力声明：`app/tools.expose-to-model`、`app/tasks.manage`、`app/session.start-turn`（供 `minimax_context_ir` 的工具暴露与异步结果投递）。**已安装用户重载 App 时会被要求复核这些新能力**（取消则旧实例继续运行）；其中模型工具开关默认关闭，需在 设置 → 安全 → 应用能力 中为本应用打开。
 - 新增 `scripts/check-clean.mjs` 与 `.githooks/pre-commit`（本地泄漏守卫）：提交前扫描 tracked 文件中的本机路径 / 密钥形态，命中即拒绝提交，并同时跑离线单测。
 - `lib/minimax-api.mjs`：删除从未被读取的 `budget.knownSizes` 字段（死代码）。
 - `lib/minimax-adapter.mjs`：为「排除指向自身的凭证 provider 提示」补注释，说明当前无自填 key 通道、若将来增加需重审。
 
 ### 测试
 
-- 新增 `tests/download-state.test.mjs`（9 条下载状态机生命周期用例）。全套 **55/55**。
+- 新增 `tests/download-state.test.mjs`（9 条下载状态机生命周期用例）、`tests/context-ir.test.mjs`（26 条 Context-IR 请求体与素材映射用例）、`tests/context-ir-tool.test.mjs`（18 条工具注册与异步生命周期用例）、`tests/regeneration-submit.test.mjs`（5 条再生成提交用例）；`tests/request-body.test.mjs` 扩充至 42 条。全套 **124/124**。
 
 ## [0.1.7] - 2026-10-09
 
