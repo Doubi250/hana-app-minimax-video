@@ -189,6 +189,10 @@ test("apply: registers minimax_context_ir — prompt enhancement only, async del
   assert.match(parameters.properties.ratio.description, /纯文本/);
 });
 
+const { CONTEXT_IR_REF_LIMITS } = await import(
+  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+);
+
 test("apply: multimodal parameters — single frame refs, capped lists, and the exclusion rule in the description", async () => {
   const { fetch } = contextIrFetch({});
   const { ctx, calls } = hostStub({ fetch });
@@ -202,7 +206,13 @@ test("apply: multimodal parameters — single frame refs, capped lists, and the 
     assert.ok(variants.some((v) => v.type === "string"), `${key} accepts a URL string`);
     assert.ok(variants.some((v) => v.type === "object"), `${key} accepts a ref object`);
   }
-  for (const [key, max] of [["referenceImages", 9], ["referenceVideos", 3], ["referenceAudios", 3]]) {
+  // The schema maxItems come from the single limits constant — a cap change
+  // must not be able to leave a stale number in the advertised schema.
+  for (const [key, max] of [
+    ["referenceImages", CONTEXT_IR_REF_LIMITS.images],
+    ["referenceVideos", CONTEXT_IR_REF_LIMITS.videos],
+    ["referenceAudios", CONTEXT_IR_REF_LIMITS.audios],
+  ]) {
     assert.equal(properties[key].type, "array", key);
     assert.equal(properties[key].maxItems, max, key);
     assert.ok(Array.isArray(properties[key].items.anyOf), `${key} items accept multiple shapes`);

@@ -226,33 +226,26 @@ test("context-ir body: first/last frame mixed with reference materials is reject
   );
 });
 
-test("context-ir body: caps — images ≤9, videos ≤3, audios ≤3", async () => {
-  const img = (i) => `https://cdn.example.com/${i}.png`;
+test("context-ir body: caps — images ≤9, videos ≤3, audios ≤3, with the exact Chinese messages", async () => {
+  const urls = (ext, count) =>
+    Array.from({ length: count }, (_, i) => `https://cdn.example.com/${i}.${ext}`);
   await assert.rejects(
-    () => buildContextIrRequestBody({ prompt: "x", referenceImages: Array.from({ length: 10 }, (_, i) => img(i)) }),
-    /9/,
+    () => buildContextIrRequestBody({ prompt: "x", referenceImages: urls("png", 10) }),
+    (error) => error.message === "H3-Context-IR 最多支持 9 张参考图片（收到 10 张）",
   );
   await assert.rejects(
-    () =>
-      buildContextIrRequestBody({
-        prompt: "x",
-        referenceVideos: ["https://cdn.example.com/1.mp4", "https://cdn.example.com/2.mp4", "https://cdn.example.com/3.mp4", "https://cdn.example.com/4.mp4"],
-      }),
-    /3/,
+    () => buildContextIrRequestBody({ prompt: "x", referenceVideos: urls("mp4", 4) }),
+    (error) => error.message === "H3-Context-IR 最多支持 3 个参考视频（收到 4 个）",
   );
   await assert.rejects(
-    () =>
-      buildContextIrRequestBody({
-        prompt: "x",
-        referenceAudios: ["https://cdn.example.com/1.wav", "https://cdn.example.com/2.wav", "https://cdn.example.com/3.wav", "https://cdn.example.com/4.wav"],
-      }),
-    /3/,
+    () => buildContextIrRequestBody({ prompt: "x", referenceAudios: urls("wav", 4) }),
+    (error) => error.message === "H3-Context-IR 最多支持 3 段参考音频（收到 4 段）",
   );
   const body = await buildContextIrRequestBody({
     prompt: "x",
-    referenceImages: Array.from({ length: 9 }, (_, i) => img(i)),
-    referenceVideos: ["https://cdn.example.com/1.mp4", "https://cdn.example.com/2.mp4", "https://cdn.example.com/3.mp4"],
-    referenceAudios: ["https://cdn.example.com/1.wav", "https://cdn.example.com/2.wav", "https://cdn.example.com/3.wav"],
+    referenceImages: urls("png", 9),
+    referenceVideos: urls("mp4", 3),
+    referenceAudios: urls("wav", 3),
   });
   assert.equal(body.content.length, 1 + 9 + 3 + 3);
 });
