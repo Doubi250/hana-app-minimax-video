@@ -127,6 +127,7 @@ export async function apply(ctx) {
         network: ctx.network,
         bus: ctx.bus,
         tasks: ctx.tasks,
+        resources: ctx.resources,
       }),
     );
   } catch (error) {
