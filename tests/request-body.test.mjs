@@ -136,6 +136,77 @@ test("inferMode: 1 image → image2video, 2+ or video/audio → multimodal2video
   assert.equal(inferMode({ prompt: "x", audio: "a.mp3" }), "multimodal2video");
 });
 
+/* 6b. regeneration (2K, source_task_id path) ----------------------- */
+
+test("regeneration: a bare source_task_id drives the dedicated 2K body", async () => {
+  // No `mode`, no `prompt`: the source_task_id itself identifies the request.
+  const body = await build({
+    source_task_id: "mm-768p-task-1",
+    duration: 6,
+    ratio: "adaptive",
+  });
+  assert.deepEqual(body, {
+    model: "MiniMax-H3",
+    source_task_id: "mm-768p-task-1",
+    resolution: "2K",
+  });
+  // The source task fixes content, duration and ratio — none of them ride along.
+  assert.equal("content" in body, false);
+  assert.equal("duration" in body, false);
+  assert.equal("ratio" in body, false);
+  assert.equal("aigc_watermark" in body, false, "not set → not carried");
+});
+
+test("regeneration: a non-empty source_task_id routes there even without the mode", async () => {
+  // Either signal identifies the request; a stray mode must not misroute it.
+  const body = await build({ mode: "text2video", source_task_id: "t-2", prompt: "ignored" });
+  assert.equal(body.source_task_id, "t-2");
+  assert.equal(body.content, undefined);
+});
+
+test("regeneration: explicit mode + watermark opt-in", async () => {
+  const body = await build({
+    prompt: "x",
+    mode: "regeneration",
+    source_task_id: "t-1",
+    video_resolution: "2K",
+    aigc_watermark: true,
+  });
+  assert.deepEqual(body, {
+    model: "MiniMax-H3",
+    source_task_id: "t-1",
+    resolution: "2K",
+    aigc_watermark: true,
+  });
+  const optedOut = await build({ source_task_id: "t-1", aigc_watermark: false });
+  assert.equal(optedOut.aigc_watermark, false, "explicitly given → carried even when false");
+});
+
+test("regeneration: mode=regeneration without a source_task_id is rejected", async () => {
+  await assert.rejects(
+    () => build({ prompt: "x", mode: "regeneration" }),
+    /source_task_id/,
+  );
+});
+
+test("regeneration: only 2K passes the resolution gate", async () => {
+  await assert.rejects(
+    () => build({ source_task_id: "t-1", video_resolution: "768P" }),
+    /只支持分辨率/,
+  );
+});
+
+test("regeneration: H3-Max does not carry the mode — explicit or via source_task_id", async () => {
+  await assert.rejects(
+    () => build({ prompt: "x", mode: "regeneration", source_task_id: "t-1", modelId: "MiniMax-H3-Max" }, H3_MAX),
+    (error) => /MiniMax-H3-Max/.test(error.message) && /regeneration/.test(error.message),
+  );
+  await assert.rejects(
+    () => build({ prompt: "x", source_task_id: "t-1", modelId: "MiniMax-H3-Max" }, H3_MAX),
+    /不支持模式/,
+  );
+});
+
 /* 7. validation ---------------------------------------------------- */
 
 test("validation: empty prompt is rejected", async () => {
@@ -236,7 +307,7 @@ test("extractBytes: a useless shape reports the top-level keys", () => {
 
 /* 10. capability snapshot ------------------------------------------ */
 
-test("capability snapshot: two models, five modes, protocolId matches the adapter", () => {
+test("capability snapshot: two models with per-model modes, protocolId matches the adapter", () => {
   const snapshot = buildCapabilitySnapshot();
   assert.equal(snapshot.providerId, "minimax-video");
   const video = snapshot.media.videoGeneration;
@@ -244,22 +315,54 @@ test("capability snapshot: two models, five modes, protocolId matches the adapte
   assert.equal(video.models.length, 2);
   for (const model of video.models) {
     assert.equal(model.protocolId, "minimax-video-videos");
-    assert.equal(model.modes.length, 5);
     assert.deepEqual(model.outputs, ["video"]);
   }
   const h3 = video.models.find((m) => m.id === "MiniMax-H3");
   const h3max = video.models.find((m) => m.id === "MiniMax-H3-Max");
+  // The five generation modes are shared; regeneration is H3-only.
+  assert.equal(h3.modes.length, 6);
+  assert.equal(h3max.modes.length, 5);
+  assert.ok(h3.modes.some((m) => m.id === "regeneration" && m.label === "2K 再生成"));
+  assert.ok(!h3max.modes.some((m) => m.id === "regeneration"));
   assert.deepEqual(h3.resolutions, ["768P", "2K"]);
   assert.deepEqual(h3max.resolutions, ["480P", "768P"]);
   assert.deepEqual(h3.duration, { min: 4, max: 15 });
   assert.deepEqual(h3max.duration, { min: 5, max: 15 });
 });
 
-test("parameterSchema: each mode labels its three parameters in Chinese", () => {
+test("regeneration mode schema: source_task_id + 2K resolution + opt-in watermark, multimodal limits", () => {
+  const snapshot = buildCapabilitySnapshot();
+  const h3 = snapshot.media.videoGeneration.models.find((m) => m.id === "MiniMax-H3");
+  const regen = h3.modes.find((m) => m.id === "regeneration");
+  const props = regen.parameterSchema.properties;
+  // The source task fixes duration and ratio — they are not parameters here.
+  assert.equal("duration" in props, false);
+  assert.equal("ratio" in props, false);
+  assert.equal(props.source_task_id.type, "string");
+  assert.deepEqual(props.video_resolution.enum, ["2K"]);
+  assert.equal(props.video_resolution.default, "2K");
+  assert.equal(props.aigc_watermark.type, "boolean");
+  assert.equal(props.aigc_watermark.default, false);
+  assert.deepEqual(regen.defaults, { video_resolution: "2K", aigc_watermark: false });
+  assert.deepEqual(regen.inputLimits, {
+    referenceImages: { min: 0, max: 9 },
+    referenceVideos: { min: 0, max: 3 },
+    referenceAudios: { min: 0, max: 3 },
+  });
+});
+
+test("parameterSchema: each mode labels its parameters in Chinese (regeneration has its own set)", () => {
   const snapshot = buildCapabilitySnapshot();
   for (const model of snapshot.media.videoGeneration.models) {
     for (const mode of model.modes) {
       const props = mode.parameterSchema.properties;
+      if (mode.id === "regeneration") {
+        // No duration/ratio here: the source task determines both.
+        assert.equal(props.source_task_id.title, "源任务 ID");
+        assert.equal(props.video_resolution.title, "分辨率");
+        assert.equal(props.aigc_watermark.title, "AIGC 水印");
+        continue;
+      }
       assert.equal(props.duration.title, "生成视频时长（秒）");
       assert.equal(props.ratio.title, "宽高比");
       assert.equal(props.video_resolution.title, "分辨率");
