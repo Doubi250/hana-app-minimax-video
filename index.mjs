@@ -119,8 +119,9 @@ export async function apply(ctx) {
   try {
     // The context-ir tool ships the enhanced prompt back into the conversation
     // through the host task system (delivery next-step), so it needs the tool
-    // registry plus tasks. Registration returns a disposer bound to the app's
-    // lifecycle; the host drains these registrations before publishing.
+    // registry plus tasks. `ctx.tools.register` returns its disposer
+    // synchronously (per the app SDK — unlike the media registrations above,
+    // which are promises), so there is nothing to await here.
     ctx.tools.register(
       createMinimaxContextIrTool({
         logger: ctx.logger,
