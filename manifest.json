@@ -10,7 +10,10 @@
   "capabilities": [
     "app/media.provide",
     "app/resources.read",
-    "app/provider.credentials.read"
+    "app/provider.credentials.read",
+    "app/tools.expose-to-model",
+    "app/tasks.manage",
+    "app/session.start-turn"
   ],
   "network": {
     "allowedHosts": [
