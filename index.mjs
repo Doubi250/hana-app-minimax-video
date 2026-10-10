@@ -1,9 +1,11 @@
 /**
- * MiniMax 视频生成 — Hana v2 App (pure backend media provider).
+ * MiniMax 视频生成 — Hana v2 App (media provider + context-ir tool).
  *
  * Registers one runtime capability source and one media adapter with the host's
  * media runtime, so `media_describe-options` / `media_generate-video` can list
- * and drive MiniMax H3. No UI, no cards, no tools, no settings page.
+ * and drive MiniMax H3, plus the `minimax_context_ir` model tool that enhances
+ * prompts and delivers them back through the host task system. No UI, no
+ * cards, no settings page.
  *
  * Plain ESM on purpose: the isolated app process has no host `node_modules`,
  * so `@hana/app-sdk` is never imported — everything comes from the `ctx` handed
@@ -19,12 +21,13 @@ import {
 import { createMinimaxVideoAdapter } from "./lib/minimax-adapter.mjs";
 import { createMinimaxContextIrTool } from "./lib/context-ir-tool.mjs";
 
-const REGISTER_FAILURE_HINT =
-  "缺少 app/media.provide 授权或媒体运行时不可用";
+const MEDIA_REGISTER_HINT = "缺少 app/media.provide 授权或媒体运行时不可用";
+const TOOL_REGISTER_HINT =
+  "缺少 app/tools.expose-to-model 授权或工具注册表不可用";
 
-async function logError(logger, label, error) {
+async function logError(logger, label, error, hint = MEDIA_REGISTER_HINT) {
   try {
-    await logger?.error?.(`minimax-video ${label} 注册失败（${REGISTER_FAILURE_HINT}）：${error?.message || error}`);
+    await logger?.error?.(`minimax-video ${label} 注册失败（${hint}）：${error?.message || error}`);
   } catch {
     // Logging must never break app loading.
   }
@@ -127,7 +130,7 @@ export async function apply(ctx) {
       }),
     );
   } catch (error) {
-    await logError(logger, "工具", error);
+    await logError(logger, "工具", error, TOOL_REGISTER_HINT);
   }
 
   await ctx.logger?.info?.("minimax-video loaded");

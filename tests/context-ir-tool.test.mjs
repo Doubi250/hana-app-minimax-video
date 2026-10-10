@@ -277,6 +277,20 @@ test("execute: a failed submission settles the host task as failed and surfaces 
   assert.equal(tasks.completed.length, 0);
 });
 
+test("execute: a host without a task service → explicit error, nothing is submitted", async () => {
+  const { fetch, calls } = contextIrFetch({});
+  const { ctx, calls: hostCalls } = hostStub({ fetch });
+  ctx.tasks = undefined;
+  await apply(ctx);
+  const tool = hostCalls.tools[0];
+
+  await assert.rejects(
+    tool.execute({ prompt: "一只猫", context: { callToken: "t" } }),
+    /任务通道不可用|tasks\.manage/,
+  );
+  assert.equal(calls.submit, 0);
+});
+
 /* 4. background lifecycle (fast poll timings) ---------------------- */
 
 const { createMinimaxContextIrTool } = await import(
