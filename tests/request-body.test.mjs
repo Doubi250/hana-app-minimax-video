@@ -8,6 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MODEL_SPECS,
+  MAX_REFERENCE_FILE_BYTES,
   buildCreateRequestBody,
   buildCapabilitySnapshot,
   extractBytes,
@@ -204,6 +205,178 @@ test("regeneration: H3-Max does not carry the mode — explicit or via source_ta
   await assert.rejects(
     () => build({ prompt: "x", source_task_id: "t-1", modelId: "MiniMax-H3-Max" }, H3_MAX),
     /不支持模式/,
+  );
+});
+
+/* 6c. regeneration (2K, base_video path) --------------------------- */
+
+test("regeneration base_video: prompt + source video build a text+base_video body", async () => {
+  const body = await build({
+    mode: "regeneration",
+    prompt: "重现原提示词",
+    video: "C:/tmp/source.mp4",
+    duration: 6,
+    ratio: "adaptive",
+  });
+  assert.equal(body.model, "MiniMax-H3");
+  assert.equal(body.resolution, "2K");
+  assert.equal(body.source_task_id, undefined);
+  assert.equal(body.duration, undefined);
+  assert.equal(body.ratio, undefined);
+  assert.equal("aigc_watermark" in body, false, "not set → not carried");
+  assert.equal(body.content.length, 2);
+  assert.deepEqual(body.content[0], { type: "text", text: "重现原提示词" });
+  assert.equal(body.content[1].type, "video_url");
+  assert.equal(body.content[1].role, "base_video");
+  assert.ok(body.content[1].video_url.url.startsWith("data:video/mp4;base64,"));
+});
+
+test("regeneration base_video: the prompt is required — the original text must be reproduced", async () => {
+  await assert.rejects(
+    () => build({ mode: "regeneration", video: "C:/tmp/source.mp4" }),
+    /prompt/,
+  );
+});
+
+test("regeneration base_video: a non-2K resolution is rejected like the source path", async () => {
+  await assert.rejects(
+    () =>
+      build({
+        mode: "regeneration",
+        prompt: "x",
+        video: "C:/tmp/source.mp4",
+        video_resolution: "768P",
+      }),
+    /只支持分辨率/,
+  );
+});
+
+test("regeneration base_video: materials keep their original roles, base video goes last", async () => {
+  const body = await build({
+    mode: "regeneration",
+    prompt: "重现原提示词",
+    // `image` / `audio` repeat the reference lists here on purpose: the host
+    // mirrors a non-empty referenceVideos / referenceImages / referenceAudios
+    // array onto the singular keys, and that mirrored copy must not turn into
+    // a first frame, a duplicate, or a base video.
+    image: ["C:/tmp/ref1.png", "C:/tmp/ref2.png"],
+    referenceImages: ["C:/tmp/ref1.png", "C:/tmp/ref2.png"],
+    referenceVideos: ["C:/tmp/ref.mp4"],
+    referenceAudios: ["C:/tmp/ref.wav"],
+    audio: ["C:/tmp/ref.wav"],
+    video: "C:/tmp/source.mp4",
+    aigc_watermark: true,
+  });
+  assert.equal(body.source_task_id, undefined);
+  assert.equal(body.aigc_watermark, true, "the watermark opt-in rides along on this path too");
+  const items = body.content.slice(1);
+  assert.deepEqual(
+    items.map((item) => item.role),
+    ["reference_image", "reference_image", "reference_video", "reference_audio", "base_video"],
+  );
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["image_url", "image_url", "video_url", "audio_url", "video_url"],
+  );
+  assert.ok(items[0].image_url.url.startsWith("data:image/png;base64,"));
+  assert.ok(items[3].audio_url.url.startsWith("data:audio/wav;base64,"));
+  assert.ok(items[4].video_url.url.startsWith("data:video/mp4;base64,"));
+});
+
+test("regeneration base_video: a lone image reproduces the original first frame", async () => {
+  const body = await build({
+    mode: "regeneration",
+    prompt: "重现原提示词",
+    image: "C:/tmp/first.png",
+    video: "C:/tmp/source.mp4",
+  });
+  const items = body.content.slice(1);
+  assert.deepEqual(items.map((item) => item.role), ["first_frame", "base_video"]);
+  assert.ok(items[0].image_url.url.startsWith("data:image/png;base64,"));
+});
+
+test("regeneration: source_task_id and video together are rejected (二选一)", async () => {
+  await assert.rejects(
+    () =>
+      build({
+        mode: "regeneration",
+        prompt: "x",
+        source_task_id: "t-1",
+        video: "C:/tmp/source.mp4",
+      }),
+    /二选一/,
+  );
+});
+
+test("regeneration: neither source_task_id nor video is rejected, listing both ways", async () => {
+  await assert.rejects(
+    () => build({ mode: "regeneration", prompt: "x" }),
+    (error) => /source_task_id/.test(error.message) && /video/.test(error.message),
+  );
+});
+
+test("regeneration base_video: two video items are rejected — exactly one base video", async () => {
+  await assert.rejects(
+    () =>
+      build({
+        mode: "regeneration",
+        prompt: "x",
+        video: ["C:/tmp/a.mp4", "C:/tmp/b.mp4"],
+      }),
+    /恰好 1 个/,
+  );
+});
+
+test("regeneration base_video: a host-mirrored referenceVideos array is not a base video", async () => {
+  // The host mirrors a non-empty `referenceVideos` onto `video` when `video`
+  // was not supplied; the same list arrives under both keys and must still
+  // read as reference-only, not as a base video.
+  await assert.rejects(
+    () =>
+      build({
+        mode: "regeneration",
+        prompt: "x",
+        video: ["C:/tmp/ref.mp4"],
+        referenceVideos: ["C:/tmp/ref.mp4"],
+      }),
+    /二选一/,
+  );
+});
+
+test("regeneration base_video: a bare video param without the mode stays multimodal", async () => {
+  const body = await build({ prompt: "x", video: "C:/tmp/clip.mp4" });
+  assert.equal(body.content[1].role, "reference_video");
+  assert.equal(body.source_task_id, undefined);
+});
+
+test("regeneration base_video: an over-budget source video points at source_task_id", async () => {
+  const bigVideo = Buffer.alloc(MAX_REFERENCE_FILE_BYTES + 1);
+  await assert.rejects(
+    () =>
+      build(
+        { mode: "regeneration", prompt: "x", video: "C:/tmp/big.mp4" },
+        H3,
+        async () => bigVideo,
+      ),
+    (error) => /12MB/.test(error.message) && /source_task_id/.test(error.message) && /压缩/.test(error.message),
+  );
+});
+
+test("regeneration base_video: other materials keep the existing budget message", async () => {
+  const bigImage = Buffer.alloc(MAX_REFERENCE_FILE_BYTES + 1);
+  await assert.rejects(
+    () =>
+      build(
+        {
+          mode: "regeneration",
+          prompt: "x",
+          video: "C:/tmp/source.mp4",
+          referenceImages: ["C:/tmp/big.png"],
+        },
+        H3,
+        async () => bigImage,
+      ),
+    /参考素材超出传输限制/,
   );
 });
 

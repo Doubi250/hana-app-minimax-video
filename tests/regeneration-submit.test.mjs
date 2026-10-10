@@ -54,6 +54,34 @@ test("adapter: a regeneration submit posts to /v2/video_regeneration", async () 
   assert.deepEqual(sent, { model: "MiniMax-H3", source_task_id: "src-1", resolution: "2K" });
 });
 
+test("adapter: a base_video regeneration posts the reproduced content to /v2/video_regeneration", async () => {
+  const { calls, fetch } = mockFetch();
+  const adapter = createMinimaxVideoAdapter({
+    network: { fetch },
+    resources: { read: async () => Buffer.from([0x00, 0x01, 0x02, 0x03]) },
+  });
+  const result = await adapter.submit(
+    {
+      mode: "regeneration",
+      prompt: "重现原提示词",
+      video: "C:/tmp/source.mp4",
+      referenceVideos: ["C:/tmp/ref.mp4"],
+      credentials: { apiKey: "k" },
+    },
+    {},
+  );
+  assert.equal(result.taskId, "t-42");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, REGENERATION_URL);
+  const sent = JSON.parse(calls[0].init.body);
+  assert.equal(sent.resolution, "2K");
+  assert.equal(sent.source_task_id, undefined);
+  assert.equal(sent.content[0].type, "text");
+  const roles = sent.content.slice(1).map((item) => item.role);
+  assert.deepEqual(roles, ["reference_video", "base_video"]);
+  assert.ok(sent.content[2].video_url.url.startsWith("data:video/mp4;base64,"));
+});
+
 test("adapter: ordinary generation still posts to /v2/video_generation", async () => {
   const { calls, fetch } = mockFetch();
   const adapter = createMinimaxVideoAdapter({ network: { fetch } });
