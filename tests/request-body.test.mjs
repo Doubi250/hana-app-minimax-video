@@ -362,6 +362,32 @@ test("regeneration base_video: an over-budget source video points at source_task
   );
 });
 
+test("regeneration base_video: a total-budget overflow keeps the standard message, not the source_task_id hint", async () => {
+  // The source video itself fits (7MB ≤ 12MB), but reading it pushes the
+  // shared total past 16MB (10MB material + 7MB source). That is a TOTAL
+  // overflow: the dedicated source_task_id hint is scoped to the single-file
+  // case, so this must surface the standard budget message instead.
+  const tenMb = Buffer.alloc(10 * 1024 * 1024);
+  const sevenMb = Buffer.alloc(7 * 1024 * 1024);
+  await assert.rejects(
+    () =>
+      build(
+        {
+          mode: "regeneration",
+          prompt: "x",
+          video: "C:/tmp/source.mp4",
+          referenceVideos: ["C:/tmp/ref.mp4"],
+        },
+        H3,
+        async (filePath) => (filePath.endsWith("source.mp4") ? sevenMb : tenMb),
+      ),
+    (error) =>
+      /参考素材超出传输限制/.test(error.message) &&
+      /总量 ≤16MB/.test(error.message) &&
+      !/source_task_id/.test(error.message),
+  );
+});
+
 test("regeneration base_video: other materials keep the existing budget message", async () => {
   const bigImage = Buffer.alloc(MAX_REFERENCE_FILE_BYTES + 1);
   await assert.rejects(
