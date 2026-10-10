@@ -109,6 +109,24 @@ function contextIrFetch({ queries = [], submit = () => ({ task_id: "remote-1" })
   return { fetch, calls };
 }
 
+/** A fake ResourceIO: records every ref it is asked to read, answers bytes. */
+function fakeResources() {
+  return {
+    reads: [],
+    async read(ref) {
+      this.reads.push(ref);
+      if (ref.kind === "session-file") {
+        // The host read reply carries the resolved file path (MIME source).
+        return { filePath: "C:/cache/f-9.jpg", content: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]) };
+      }
+      return { content: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) };
+    },
+    async stat() {
+      return null;
+    },
+  };
+}
+
 /** A host stub rich enough for `apply(ctx)` including tools / tasks / network. */
 function hostStub({ fetch, credentials } = {}) {
   const calls = { tools: [], credentials: [] };
@@ -122,10 +140,12 @@ function hostStub({ fetch, credentials } = {}) {
     },
   };
   const tasks = fakeTasks();
+  const resources = fakeResources();
   const ctx = {
     bus,
     logger: fakeLogger(),
     tasks,
+    resources,
     network: { fetch },
     media: {
       async registerCapabilitySource() {},
@@ -138,12 +158,12 @@ function hostStub({ fetch, credentials } = {}) {
       },
     },
   };
-  return { ctx, calls, tasks };
+  return { ctx, calls, tasks, resources };
 }
 
 /* 1. registration shape -------------------------------------------- */
 
-test("apply: registers minimax_context_ir — prompt enhancement only, async delivery, six-ratio schema", async () => {
+test("apply: registers minimax_context_ir — prompt enhancement only, async delivery, scenario-ratio schema", async () => {
   const { fetch } = contextIrFetch({});
   const { ctx, calls } = hostStub({ fetch });
   await apply(ctx);
@@ -163,9 +183,34 @@ test("apply: registers minimax_context_ir — prompt enhancement only, async del
   assert.equal(parameters.properties.duration.maximum, 15);
   assert.equal(parameters.properties.duration.default, 5);
   assert.equal(parameters.properties.ratio.type, "string");
-  assert.deepEqual(parameters.properties.ratio.enum, ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
-  assert.equal(parameters.properties.ratio.default, "16:9");
-  assert.ok(!parameters.properties.ratio.enum.includes("adaptive"), "a pure text scenario has no adaptive");
+  // Frames and reference scenarios may need adaptive, so the enum is the full
+  // seven; the text-only rejection lives in the body builder, not the schema.
+  assert.deepEqual(parameters.properties.ratio.enum, ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+  assert.match(parameters.properties.ratio.description, /纯文本/);
+});
+
+test("apply: multimodal parameters — single frame refs, capped lists, and the exclusion rule in the description", async () => {
+  const { fetch } = contextIrFetch({});
+  const { ctx, calls } = hostStub({ fetch });
+  await apply(ctx);
+  const tool = calls.tools[0];
+  const properties = tool.parameters.properties;
+
+  for (const key of ["firstFrame", "lastFrame"]) {
+    const variants = properties[key].anyOf;
+    assert.ok(Array.isArray(variants), `${key} accepts multiple shapes`);
+    assert.ok(variants.some((v) => v.type === "string"), `${key} accepts a URL string`);
+    assert.ok(variants.some((v) => v.type === "object"), `${key} accepts a ref object`);
+  }
+  for (const [key, max] of [["referenceImages", 9], ["referenceVideos", 3], ["referenceAudios", 3]]) {
+    assert.equal(properties[key].type, "array", key);
+    assert.equal(properties[key].maxItems, max, key);
+    assert.ok(Array.isArray(properties[key].items.anyOf), `${key} items accept multiple shapes`);
+  }
+  assert.deepEqual(tool.parameters.required, ["prompt"]);
+  assert.match(tool.description, /互斥/);
+  assert.match(tool.description, /session-file/);
+  assert.match(tool.description, /URL/);
 });
 
 /* 2. execute through the registered tool (wiring) ------------------- */
@@ -214,6 +259,116 @@ test("apply-tool: execute submits with the callToken task and settles complete w
     "H3-Context-IR 增强提示词：\n\n一只橘猫在夕阳下的窗台上打盹，暖色调",
   );
   assert.equal(tasks.failed.length, 0);
+});
+
+test("execute: local and session frame refs are read through the injected resources and submitted as first/last frame data URLs", async () => {
+  const { fetch, calls } = contextIrFetch({
+    queries: [{ task: { status: "success", content: { prompt: "增强提示词" } } }],
+  });
+  const { ctx, calls: hostCalls, tasks, resources } = hostStub({ fetch });
+  await apply(ctx);
+  const tool = hostCalls.tools[0];
+
+  await tool.execute({
+    prompt: "从清晨到黄昏",
+    firstFrame: { kind: "local-file", path: "C:/tmp/a.png" },
+    lastFrame: { kind: "session-file", fileId: "f-9" },
+    context: { callToken: TOKEN },
+  });
+
+  assert.deepEqual(resources.reads, [
+    { kind: "local-file", path: "C:/tmp/a.png" },
+    { kind: "session-file", fileId: "f-9" },
+  ]);
+  assert.equal(calls.submit, 1);
+  const sent = calls.submitBodies[0];
+  assert.equal(sent.content.length, 3);
+  assert.equal(sent.content[1].role, "first_frame");
+  assert.ok(sent.content[1].image_url.url.startsWith("data:image/png;base64,"));
+  assert.equal(sent.content[2].role, "last_frame");
+  assert.ok(sent.content[2].image_url.url.startsWith("data:image/jpeg;base64,"));
+  assert.equal(sent.ratio, "adaptive", "a frame scenario pins adaptive");
+  assert.equal(tasks.created.length, 1);
+});
+
+test("execute: reference materials map to reference_* roles; URLs pass through and are never read", async () => {
+  const { fetch, calls } = contextIrFetch({
+    queries: [{ task: { status: "success", content: { prompt: "增强提示词" } } }],
+  });
+  const { ctx, calls: hostCalls, resources } = hostStub({ fetch });
+  await apply(ctx);
+  const tool = hostCalls.tools[0];
+
+  await tool.execute({
+    prompt: "参考素材合成",
+    referenceImages: ["https://cdn.example.com/a.png"],
+    referenceVideos: [{ kind: "local-file", path: "C:/tmp/clip.mp4" }],
+    referenceAudios: ["https://cdn.example.com/voice.wav"],
+    context: { callToken: TOKEN },
+  });
+
+  assert.deepEqual(resources.reads, [{ kind: "local-file", path: "C:/tmp/clip.mp4" }], "only the local ref is read");
+  const sent = calls.submitBodies[0];
+  assert.deepEqual(sent.content.slice(1).map((item) => item.role), [
+    "reference_image",
+    "reference_video",
+    "reference_audio",
+  ]);
+  assert.equal(sent.content[1].image_url.url, "https://cdn.example.com/a.png");
+  assert.ok(sent.content[2].video_url.url.startsWith("data:video/mp4;base64,"));
+  assert.equal(sent.ratio, "adaptive", "a reference scenario defaults to adaptive");
+});
+
+test("execute: mixing frames with reference materials is rejected before any side effect", async () => {
+  const { fetch, calls } = contextIrFetch({});
+  const { ctx, calls: hostCalls, tasks } = hostStub({ fetch });
+  await apply(ctx);
+  const tool = hostCalls.tools[0];
+
+  await assert.rejects(
+    tool.execute({
+      prompt: "一只猫",
+      firstFrame: "https://cdn.example.com/a.png",
+      referenceImages: ["https://cdn.example.com/b.png"],
+      context: { callToken: TOKEN },
+    }),
+    /互斥/,
+  );
+  assert.equal(tasks.created.length, 0);
+  assert.equal(calls.submit, 0);
+});
+
+test("execute: a bare local path string is rejected with the accepted shapes", async () => {
+  const { fetch, calls } = contextIrFetch({});
+  const { ctx, calls: hostCalls, tasks } = hostStub({ fetch });
+  await apply(ctx);
+  const tool = hostCalls.tools[0];
+
+  await assert.rejects(
+    tool.execute({ prompt: "一只猫", firstFrame: "C:/tmp/a.png", context: { callToken: TOKEN } }),
+    /http\(s\)/,
+  );
+  assert.equal(tasks.created.length, 0);
+  assert.equal(calls.submit, 0);
+});
+
+test("execute: a host without the resources channel rejects a local reference before any task", async () => {
+  const { fetch, calls } = contextIrFetch({});
+  const { ctx, calls: hostCalls, tasks } = hostStub({ fetch });
+  ctx.resources = undefined;
+  await apply(ctx);
+  const tool = hostCalls.tools[0];
+
+  await assert.rejects(
+    tool.execute({
+      prompt: "一只猫",
+      firstFrame: { kind: "local-file", path: "C:/tmp/a.png" },
+      context: { callToken: TOKEN },
+    }),
+    /读取通道不可用|resources\.read/,
+  );
+  assert.equal(tasks.created.length, 0);
+  assert.equal(calls.submit, 0);
 });
 
 /* 3. execute failure paths ----------------------------------------- */
