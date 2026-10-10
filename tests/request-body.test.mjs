@@ -254,3 +254,17 @@ test("capability snapshot: two models, five modes, protocolId matches the adapte
   assert.deepEqual(h3.duration, { min: 4, max: 15 });
   assert.deepEqual(h3max.duration, { min: 5, max: 15 });
 });
+
+test("parameterSchema: each mode labels its three parameters in Chinese", () => {
+  const snapshot = buildCapabilitySnapshot();
+  for (const model of snapshot.media.videoGeneration.models) {
+    for (const mode of model.modes) {
+      const props = mode.parameterSchema.properties;
+      assert.equal(props.duration.title, "生成视频时长（秒）");
+      assert.equal(props.ratio.title, "宽高比");
+      assert.equal(props.video_resolution.title, "分辨率");
+      // The enum option values stay literal — only the field label is Chinese.
+      assert.ok(props.video_resolution.enum.includes("768P"));
+    }
+  }
+});
