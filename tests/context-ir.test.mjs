@@ -97,7 +97,7 @@ test("context-ir body: first+last frame refs become first_frame/last_frame data 
   assert.equal(body.ratio, "adaptive", "the input image decides the aspect ratio");
 });
 
-test("context-ir body: a public URL frame passes through untouched and never reads bytes", async () => {
+test("context-ir body: a public URL string passes through untouched and never reads bytes", async () => {
   let reads = 0;
   const readReference = async () => {
     reads += 1;
@@ -110,13 +110,6 @@ test("context-ir body: a public URL frame passes through untouched and never rea
   });
   assert.equal(body.content[1].image_url.url, "https://cdn.example.com/a.png");
   assert.equal(body.content[1].role, "first_frame");
-  const wrapped = await buildContextIrRequestBody({
-    prompt: "x",
-    lastFrame: { kind: "url", url: "https://cdn.example.com/b.png" },
-    readReference,
-  });
-  assert.equal(wrapped.content[1].image_url.url, "https://cdn.example.com/b.png");
-  assert.equal(wrapped.content[1].role, "last_frame");
   assert.equal(reads, 0, "a public URL is passed through, not fetched");
 });
 
@@ -164,6 +157,17 @@ test("context-ir body: malformed single refs are rejected with the accepted shap
   await assert.rejects(
     () => buildContextIrRequestBody({ prompt: "x", firstFrame: ["https://cdn.example.com/a.png"] }),
     /单个引用/,
+  );
+  // The object form is not part of the advertised surface: the schema lists
+  // exactly session-file / local-file, and a public URL travels as a plain
+  // http(s) string. `{ kind: "url" }` is therefore rejected, not accepted.
+  await assert.rejects(
+    () =>
+      buildContextIrRequestBody({
+        prompt: "x",
+        firstFrame: { kind: "url", url: "https://cdn.example.com/a.png" },
+      }),
+    /引用形状无效/,
   );
 });
 
