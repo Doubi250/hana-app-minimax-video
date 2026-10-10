@@ -17,6 +17,7 @@ import {
   throwLaneUnavailable,
 } from "./lib/minimax-api.mjs";
 import { createMinimaxVideoAdapter } from "./lib/minimax-adapter.mjs";
+import { createMinimaxContextIrTool } from "./lib/context-ir-tool.mjs";
 
 const REGISTER_FAILURE_HINT =
   "缺少 app/media.provide 授权或媒体运行时不可用";
@@ -110,6 +111,23 @@ export async function apply(ctx) {
     await ctx.media.registerAdapter(adapter);
   } catch (error) {
     await logError(logger, "适配器", error);
+  }
+
+  try {
+    // The context-ir tool ships the enhanced prompt back into the conversation
+    // through the host task system (delivery next-step), so it needs the tool
+    // registry plus tasks. Registration returns a disposer bound to the app's
+    // lifecycle; the host drains these registrations before publishing.
+    ctx.tools.register(
+      createMinimaxContextIrTool({
+        logger: ctx.logger,
+        network: ctx.network,
+        bus: ctx.bus,
+        tasks: ctx.tasks,
+      }),
+    );
+  } catch (error) {
+    await logError(logger, "工具", error);
   }
 
   await ctx.logger?.info?.("minimax-video loaded");
