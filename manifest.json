@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "minimax-video",
   "name": "MiniMax 视频生成",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "minAppVersion": "0.978.0",
   "description": "把 MiniMax H3 视频生成（文生视频 / 图生视频 / 多模态参考）接入 Hana 媒体系统，凭证取自本机的 MiniMax Token Plan 供应商。",
   "entry": "index.mjs",

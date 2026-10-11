@@ -322,13 +322,13 @@ test("context-ir body: an empty reference list entry is rejected", async () => {
   );
 });
 
-test("manifest: the three new capabilities are declared and the version is untouched", () => {
+test("manifest: the three new capabilities are declared and the version is 0.2.0", () => {
   const manifestPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   for (const capability of ["app/tools.expose-to-model", "app/tasks.manage", "app/session.start-turn"]) {
     assert.ok(manifest.capabilities.includes(capability), `missing capability: ${capability}`);
   }
-  assert.equal(manifest.version, "0.1.7", "this ticket must not bump the version");
+  assert.equal(manifest.version, "0.2.0", "v0.2.0 release");
 });
 
 /* 2. client: submit + query ---------------------------------------- */
