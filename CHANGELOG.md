@@ -8,6 +8,7 @@
 
 - **2K 视频再生成**：`MiniMax-H3` 新增 `regeneration` 模式（「2K 再生成」）——把已生成的 768P 成片升级为 2K。两种输入二选一：`source_task_id`（需 MiniMax 白名单；源任务属本账号且 `succeeded`、7 天内；零字节上传）或 `base_video`（源视频经 `video` 参数传入，须重现原 prompt 与素材，受传输预算约束）。成品照常经下载 / 发布管线落入媒体库。
 - **H3-Context-IR 增强提示词工具**：新增模型工具 `minimax_context_ir`——异步提交提示词增强任务（首 / 尾帧与参考素材二选一互斥），立即返回「已提交」，增强后的提示词在后台完成时自动送达会话，可直接用于后续生成或再生成。
+- **工作流引导（App Skill）**：新增 App Skill `minimax-2k-workflow`，引导「先增强提示词 → 再生成 → 需要时升 2K」的推荐链路，随 App 装载对当前 Agent 生效。
 
 ### 修正
 

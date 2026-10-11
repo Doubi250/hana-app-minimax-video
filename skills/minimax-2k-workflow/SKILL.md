@@ -1,8 +1,8 @@
 ---
 name: minimax-2k-workflow
 description: "MiniMax 视频生成的 2K 高质量工作流：先用 minimax_context_ir 把粗提示词扩成结构化稿，再生成视频，需更高清晰度时用 regeneration 模式升为 2K。当用户想用 MiniMax 生成视频、提升成片画质、把已有成片升 2K，或提到提示词增强 / 2K / 超分时使用。"
-profile: recipe
-default-enabled: true
+metadata:
+  default-enabled: true
 ---
 
 # MiniMax 2K 工作流
