@@ -22,7 +22,7 @@
 
 ### 测试
 
-- 新增 `tests/download-state.test.mjs`（9 条下载状态机生命周期用例）、`tests/context-ir.test.mjs`（26 条 Context-IR 请求体与素材映射用例）、`tests/context-ir-tool.test.mjs`（18 条工具注册与异步生命周期用例）、`tests/regeneration-submit.test.mjs`（5 条再生成提交用例）；`tests/request-body.test.mjs` 扩充至 42 条。全套 **124/124**。
+- 新增 `tests/download-state.test.mjs`（9 条下载状态机生命周期用例）、`tests/context-ir.test.mjs`（26 条 Context-IR 请求体与素材映射用例）、`tests/context-ir-tool.test.mjs`（18 条工具注册与异步生命周期用例）、`tests/regeneration-submit.test.mjs`（5 条再生成提交用例）；`tests/request-body.test.mjs` 扩充至 43 条。全套 **125/125**。
 
 ## [0.1.7] - 2026-10-09
 
