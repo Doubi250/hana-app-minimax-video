@@ -20,6 +20,8 @@ import {
 } from "./lib/minimax-api.mjs";
 import { createMinimaxVideoAdapter } from "./lib/minimax-adapter.mjs";
 import { createMinimaxContextIrTool } from "./lib/context-ir-tool.mjs";
+import { createTtsTool } from "./lib/tts-tool.mjs";
+import { createAsrTool } from "./lib/asr-tool.mjs";
 
 const MEDIA_REGISTER_HINT = "缺少 app/media.provide 授权或媒体运行时不可用";
 const TOOL_REGISTER_HINT =
@@ -133,6 +135,37 @@ export async function apply(ctx) {
     );
   } catch (error) {
     await logError(logger, "工具", error, TOOL_REGISTER_HINT);
+  }
+
+  try {
+    // 语音合成工具：产物写入生成目录（与媒体管线同一落点），返回的本地路径
+    // 可被后续工具当作参考音频引用。注册失败只记日志，绝不阻断 App 加载。
+    ctx.tools.register(
+      createTtsTool({
+        logger: ctx.logger,
+        network: ctx.network,
+        bus: ctx.bus,
+        generatedDir: ctx.generatedDir,
+        dataDir: ctx.dataDir,
+      }),
+    );
+  } catch (error) {
+    await logError(logger, "TTS 工具", error, TOOL_REGISTER_HINT);
+  }
+
+  try {
+    // 语音识别工具：本地文件经宿主资源通道读取（受传输预算约束），
+    // 也接受网络音频 URL。同样只记日志、不阻断加载。
+    ctx.tools.register(
+      createAsrTool({
+        logger: ctx.logger,
+        network: ctx.network,
+        bus: ctx.bus,
+        resources: ctx.resources,
+      }),
+    );
+  } catch (error) {
+    await logError(logger, "ASR 工具", error, TOOL_REGISTER_HINT);
   }
 
   await ctx.logger?.info?.("minimax-video loaded");

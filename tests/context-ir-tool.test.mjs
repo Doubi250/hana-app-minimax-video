@@ -167,8 +167,11 @@ test("apply: registers minimax_context_ir — prompt enhancement only, async del
   const { fetch } = contextIrFetch({});
   const { ctx, calls } = hostStub({ fetch });
   await apply(ctx);
-  assert.equal(calls.tools.length, 1, "exactly one tool is registered");
-  const tool = calls.tools[0];
+  // `apply` now registers the media capability source, the adapter and three
+  // model tools (context-ir, TTS, ASR); this suite owns the context-ir one.
+  const tool = calls.tools.find((t) => t.name === "minimax_context_ir");
+  assert.ok(tool, "the minimax_context_ir tool is registered");
+  assert.equal(calls.tools.length, 3, "context-ir, TTS and ASR are all registered");
   assert.equal(tool.name, "minimax_context_ir");
   assert.match(tool.description, /增强提示词/);
   assert.match(tool.description, /不产生视频/);
