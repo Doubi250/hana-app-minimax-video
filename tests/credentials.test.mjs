@@ -200,3 +200,11 @@ test("manifest: provider is authType none and there is no settings page", () => 
   assert.equal(manifest.contributes?.settings, undefined, "this app keeps no settings page");
   assert.ok(manifest.capabilities.includes("app/provider.credentials.read"));
 });
+
+test("manifest: 能力源快照 version 与 manifest.json version 保持一致", () => {
+  const manifestPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const snapshot = buildCapabilitySnapshot();
+  assert.equal(snapshot.version, manifest.version);
+});
+

@@ -19,6 +19,10 @@
 - **docs**：`known-limitations.md` 补 Files 上传的多站差异与回落语义、异步 TTS 的轮询限制（10 次/秒）与成品下载 URL 约 9 小时有效期、克隆样本约束（mp3/m4a/wav，10 秒–5 分钟，≤20MB）；`test-report.md` 如实标注未真机验证项。
 - **user-scripts.md**：补入两个新 CLI 脚本（`ext-voice-clone.mjs` / `ext-async-tts.mjs`）。
 
+### 修正
+
+- **Code Review 双轴收口**：上传路径引入 20MB 单文件上限护栏（防止超限爆 RPC 错误且明确提示）、`PROVIDER_VERSION` 常量同步至 0.3.1 并增加快照与清单一致性断言、请求头装配与错误脱敏（`withAuth` / `scrub`）单源化至 `lib/http-util.mjs`。
+
 ### 测试
 
 - 新增离线单测：`files-client.test.mjs`（上传 / 检索 / 错误信封）、`upload-fallback.test.mjs`（上传成功写 `mm_file://`、失败回落 base64、未注入时与 0.3.0 一致）、`speech-adapter.test.mjs`（注册形状、submit 落盘、凭证缺失报错）、`voice-registry.test.mjs`（原子写、损坏恢复、只写 dataDir）、`voice-clone-extension.test.mjs`、`extensions.test.mjs`（克隆与异步两条链路离线）、`cli-contract.test.mjs`（末行 JSON 契约）。
