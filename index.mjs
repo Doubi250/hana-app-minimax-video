@@ -19,6 +19,7 @@ import {
   throwLaneUnavailable,
 } from "./lib/minimax-api.mjs";
 import { createMinimaxVideoAdapter } from "./lib/minimax-adapter.mjs";
+import { createMinimaxSpeechAdapter } from "./lib/speech-adapter.mjs";
 import { createMinimaxContextIrTool } from "./lib/context-ir-tool.mjs";
 import { createTtsTool } from "./lib/tts-tool.mjs";
 import { createAsrTool } from "./lib/asr-tool.mjs";
@@ -116,6 +117,22 @@ export async function apply(ctx) {
     await ctx.media.registerAdapter(adapter);
   } catch (error) {
     await logError(logger, "适配器", error);
+  }
+
+  try {
+    // 宿主全局发音入口 `media_generate-speech` 按 `types:["speech"]` 选适配器：
+    // 注册后 MiniMax 音色即出现在宿主目录里。产物写生成目录（与媒体管线同一落点），
+    // 复用既有 speech-client 的合成实现。注册失败只记日志，绝不阻断 App 加载。
+    const speechAdapter = createMinimaxSpeechAdapter({
+      logger: ctx.logger,
+      network: ctx.network,
+      bus: ctx.bus,
+      dataDir: ctx.dataDir,
+      generatedDir: ctx.generatedDir,
+    });
+    await ctx.media.registerAdapter(speechAdapter);
+  } catch (error) {
+    await logError(logger, "语音适配器", error);
   }
 
   try {
