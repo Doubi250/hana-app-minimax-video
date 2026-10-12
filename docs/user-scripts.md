@@ -1,6 +1,6 @@
 # 用户脚本
 
-两个独立调试脚本，位于仓库 `scripts/` 目录。**它们不在安装包内**——需要时从仓库
+四个独立调试脚本，位于仓库 `scripts/` 目录。**它们不在安装包内**——需要时从仓库
 获取（clone 或直接下载对应文件）。
 
 ## 1. 冒烟测试（scripts/smoke.mjs）
@@ -27,3 +27,30 @@ $env:MINIMAX_API_KEY="<你的key>"; node scripts/fetch-task.mjs <taskId> [outPat
 - `taskId` 远端任务 id（必填）；`outPath` 输出路径（可选，默认 `scripts/minimax-task-<taskId>.mp4`）。
 - 脚本**只从环境变量读 key**，不落盘、不回显。
 - 退出码：`0` 已下载；`1` 用法/查询错误；`2` 任务未完成或已失败。
+
+## 3. 声音克隆（scripts/ext-voice-clone.mjs）
+
+**用途。** 把一段样本音克隆成可复用音色，并登记进本 App 的音色表。
+
+```powershell
+$env:MINIMAX_API_KEY="<你的key>"; node scripts/ext-voice-clone.mjs <sample> --voice-id my-voice [--label "名"] [--data-dir <目录>]
+```
+
+- 样本格式限 `mp3` / `m4a` / `wav`，时长 10 秒–5 分钟，体积 ≤20MB（**本地先校验**，不满足直接报错、不联网）。
+- 流程：上传（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone` → 登记 `{data-dir}/voices.json`（默认脚本旁 `./.minimax-data`）。`--voice-id` 缺省时由 `file_id` 派生。
+- stdout **末行**为单行 JSON（`{"ok":true,"voice":{...}}` / `{"ok":false,"error":{...}}`）；退出码 `0` 成功 / `1` 失败。
+- 脚本**只从环境变量读 key**，不落盘、不回显。
+
+## 4. 长篇异步 TTS（scripts/ext-async-tts.mjs）
+
+**用途。** 把整本书 / 长文分章切片、异步合成为音频与 SRT。
+
+```powershell
+$env:MINIMAX_API_KEY="<key>"; node scripts/ext-async-tts.mjs book.txt --subtitle --voice-id <id> --out-dir <目录>
+```
+
+- 文本来源：一个文本文件路径，或 `--text "…"`。按章节标题切片，按字符上限贪心打包。
+- 流程：逐片 `POST /v1/t2a_async_v2`（超长片经 `t2a_async_input` 上传）→ 轮询 → 完成后 `GET /v1/files/retrieve_content` 取音频（`--subtitle` 时另取 SRT）。
+- 常用选项：`--voice-id` / `--model` / `--format` / `--out-dir` / `--subtitle` / `--poll-interval <ms>`（下界 1000）/ `--timeout <ms>`（单片默认 600000）/ `--max-chars <n>`（默认 20000）。
+- stdout **末行**为单行 JSON（`{"ok":true,"tasks":[...],"files":[...]}` / `{"ok":false,"error":{...}}`）；退出码 `0`/`1`。
+- 脚本**只从环境变量读 key**，不落盘、不回显。

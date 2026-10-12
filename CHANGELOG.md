@@ -2,6 +2,35 @@
 
 本 App 的所有重要变更记录在此文件。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.3.1] - 2026-10-13
+
+### 新增
+
+- **Files 上传基建（默认先上传，失败回落）**：新增 `lib/files-client.mjs`（上传 / 检索 / 取内容）与共享的 `lib/multipart.mjs`。本地参考图 / 视频 / 音频（含 2K 再生成的源片）默认先经 `POST /v1/files/upload` 取 `file_id`，以 `mm_file://{file_id}` 云端引用提交，字节不再进宿主 RPC、不占 ≤12MB / ≤16MB 内联预算。上传不可用（未授权 / 网络差异 / 接口拒绝 / 4xx / 5xx）时**自动回落 base64 内联**，记一条 `logger.warn`，不使整单失败；未注入上传依赖时行为与 0.3.0 逐字节一致。
+- **宿主发音通道**：语音以**运行时能力源**发布 `media.speechGeneration`，并注册一个 `types:["speech"]` 适配器（`minimax-speech-tts`，`formats: mp3/wav/pcm`，`speed 0.5–2`）。宿主 `media_generate-speech` 能在语音目录里选中 MiniMax 音色；`flac` 不在宿主格式白名单内，请求即明确报错、不静默降级（需 `flac` 用模型工具 `minimax_text_to_speech`）。
+- **声音克隆（隐藏扩展 + CLI）**：新增 `lib/voice-registry.mjs`（音色表，只写 `dataDir`，原子写 + 损坏备份重建）与 `lib/extensions/voice-clone.mjs`；新增脚本 `scripts/ext-voice-clone.mjs`。样本限 mp3/m4a/wav、10 秒–5 分钟、≤20MB（本地先校验，不联网）。
+- **长篇异步 TTS（隐藏扩展 + CLI）**：新增 `lib/extensions/async-tts.mjs` 与脚本 `scripts/ext-async-tts.mjs`。按章节切片 → `POST /v1/t2a_async_v2` → 轮询 → `files/retrieve_content` 取音频（`--subtitle` 另取 SRT）；切片互不牵连。
+- **App Skill `minimax-studio`**：沉淀三条多模态工作流（影视级图音视流 / 声音克隆向导流 / 长篇有声化流水线），每步写明调用入口与失败处置。
+
+### 变更
+
+- **manifest**：`version` 升至 `0.3.1`；`name` / `description` 更新以反映全模态（宿主发音通道、声音克隆、长篇异步 TTS、Files 上传优先）。**`capabilities` 数组逐字不变**（本次零新增能力，已装用户升级免复核）；`contributes.providers[].capabilities.media` **只保留 `videoGeneration`**（写入 `speechGeneration` / `speechSynthesis` 会让整应用在清单读取阶段 `failed`）；`allowedHosts` 不变（语音与 Files 均落 `api.minimax.cn`）。
+- **README**：能力矩阵加入「宿主发音通道」「声音克隆」「长篇异步 TTS」；新增 §4.1 Files 引用与回落说明；§3 权限表如实标注本次**未新增能力**；§8 补 §8.1 宿主发音通道 / §8.2 声音克隆 / §8.3 长篇异步 TTS；文档索引加入两个 Skill。
+- **docs**：`known-limitations.md` 补 Files 上传的多站差异与回落语义、异步 TTS 的轮询限制（10 次/秒）与成品下载 URL 约 9 小时有效期、克隆样本约束（mp3/m4a/wav，10 秒–5 分钟，≤20MB）；`test-report.md` 如实标注未真机验证项。
+- **user-scripts.md**：补入两个新 CLI 脚本（`ext-voice-clone.mjs` / `ext-async-tts.mjs`）。
+
+### 测试
+
+- 新增离线单测：`files-client.test.mjs`（上传 / 检索 / 错误信封）、`upload-fallback.test.mjs`（上传成功写 `mm_file://`、失败回落 base64、未注入时与 0.3.0 一致）、`speech-adapter.test.mjs`（注册形状、submit 落盘、凭证缺失报错）、`voice-registry.test.mjs`（原子写、损坏恢复、只写 dataDir）、`voice-clone-extension.test.mjs`、`extensions.test.mjs`（克隆与异步两条链路离线）、`cli-contract.test.mjs`（末行 JSON 契约）。
+- `tests/context-ir.test.mjs` 的 manifest 守卫随版本递增同步更新为 `0.3.1`（该断言与 manifest `version` 是硬耦合：历史上每次版本递增都同时改这一行）。
+- 全套 **261/261** 离线绿灯（视频 125 + 语音 50 + Studio 新增 86）。
+
+### 未真机验证的边界
+
+- Files API 在 `.cn` 站的可用性与 `mm_file://` 兼容性未真机验证——故回落分支为设计内的正常形态（见 `docs/known-limitations.md`）。
+- 声音克隆与长篇异步 TTS 两条链路仅有离线单测，真实 key 下的端到端未跑。
+- 宿主 `media_generate-speech` 对 MiniMax 语音适配器的真实选中未真机验证。
+
 ## [0.3.0] - 2026-10-12
 
 ### 新增

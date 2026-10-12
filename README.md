@@ -1,6 +1,6 @@
 # MiniMax 音视频生成（Hana v2 App）
 
-**这是什么。** 一个纯后端的 Hana 音视频套件：把 MiniMax H3 的视频生成 REST 接口
+**这是什么。** 一个纯后端的 Hana 全模态音视频套件：把 MiniMax H3 的视频生成 REST 接口
 （`POST /v2/video_generation`）接进 Hana 的媒体系统，并以模型工具形式暴露
 H3-Context-IR 提示词增强、Speech-2.8-HD 语音合成（TTS）与 ASR-1.0 语音识别（STT）。
 装上并授权后，Agent 的 `media_describe-options` 能看到 `minimax-video` 的两个模型，
@@ -9,14 +9,19 @@ H3-Context-IR 提示词增强、Speech-2.8-HD 语音合成（TTS）与 ASR-1.0 �
 提交 → 轮询 → 下载 → 发布全部由本 App 完成，成品落在宿主的 `generatedDir` 里；
 TTS 产物写入同一生成目录，可被后续的视频 / Context-IR 请求直接引用。
 
+除模型工具外，本 App 还：把语音经**宿主发音通道**发布（`media_generate-speech` 能选到
+MiniMax 音色）；本地大素材默认**先经 Files API 上传取 `file_id`**（上传不可用时回落
+base64）；并提供**声音克隆**与**长篇异步 TTS** 两条 CLI 流水线（隐藏扩展，不注册为模型工具）。
+三条多模态工作流见 App Skill `minimax-studio`。
+
 没有 UI、没有设置页、没有卡片 —— 它是一个媒体提供方，另带三个模型工具
-（`minimax_context_ir` / `minimax_text_to_speech` / `minimax_speech_to_text`）。
+（`minimax_context_ir` / `minimax_text_to_speech` / `minimax_speech_to_text`）与两个 CLI 脚本。
 **凭证不由本 App 保存**：视频与语音都直接使用本机已配置的 **MiniMax Token Plan**
 供应商凭证，无需二次配置。
 
 - **App id**：`minimax-video`
 - **图标**：`assets/icon.svg`
-- **当前版本**：`0.3.0`（视频 + 语音全模态套件）
+- **当前版本**：`0.3.1`（全模态音视频套件：视频 + 语音双通道 + 克隆 + 异步 TTS）
 
 ---
 
@@ -30,8 +35,14 @@ TTS 产物写入同一生成目录，可被后续的视频 / Context-IR 请求�
   生成目录，返回的本地路径可直接作为视频参考音频（§8）。
 - 用模型工具 `minimax_speech_to_text` 把本地音频或公网 URL 转写为文本 / 分段时间戳
   / SRT / VTT（§8）。
-- 由一个 adapter（`minimax-video-videos`）+ 一个运行时能力源（静态模型表）+ 三个模型
-  工具组成，不贡献任何设置项。
+- 把语音经**宿主全局发音通道**发布：`media_generate-speech` 能在语音目录里选到 MiniMax
+  音色与模型，用户不必知道有专用工具（§8.1）。
+- 本地参考素材**默认先上传**（Files API）取 `file_id`，以 `mm_file://{file_id}` 云端引用
+  提交，字节不再进宿主 RPC；上传不可用时**自动回落 base64 内联**（§4.1）。
+- 用 CLI `scripts/ext-voice-clone.mjs` 把一段样本音**克隆**成可复用音色并登记音色表
+  （§8.2）；用 `scripts/ext-async-tts.mjs` 把整本书**分章异步合成**为音频与 SRT（§8.3）。
+- 由一个 adapter（`minimax-video-videos`）+ 一个语音 adapter（`minimax-speech-tts`）+ 一个
+  运行时能力源（静态模型表 + 语音能力）+ 三个模型工具组成，不贡献任何设置项。
 - 不持有任何独立凭证：视频与语音每次调用都从 **MiniMax Token Plan 供应商**取凭证
   （见 §3）。
 
@@ -80,7 +91,13 @@ TTS 产物写入同一生成目录，可被后续的视频 / Context-IR 请求�
 服务于三个模型工具（§7 / §8）：其中 `app/tools.expose-to-model` 的模型工具开关
 **默认关闭**，要在 **设置 → 安全 → 应用能力** 中为本应用单独打开，模型才能调用这些工具。
 语音工具（TTS / ASR）复用视频侧已有的 `app/resources.read`（本地音频读取）与
-`app/provider.credentials.read`（共享凭证）——合并后**未新增任何能力**。
+`app/provider.credentials.read`（共享凭证）。
+
+**本次（0.3.1）未新增任何能力。** 宿主发音通道、声音克隆、长篇异步 TTS 与 Files 上传
+全部复用上表六项：发音通道走既有的 `app/media.provide` 与凭证读取，两条 CLI 流水线
+在 App 之外运行（不占 App 能力），Files 上传走既有的网络白名单（`api.minimax.cn`）。
+因此**已装用户升级到 0.3.1 时不会被要求重新复核能力**（manifest `capabilities` 数组
+逐字不变）。
 
 ### 凭证怎么取
 
@@ -110,6 +127,21 @@ App 不向上述以外的任何主机发起请求，也不启动任何本地服�
 
 语音工具复用同一组出站域：TTS（`POST /v1/t2a_v2`）与 ASR（`POST /v1/speech_to_text`）
 均落在 `api.minimax.cn`，无需新增白名单。
+
+### 4.1 Files 上传与回落
+
+本地参考图 / 视频 / 音频（含 2K 再生成的源片）**默认先经 Files API 上传**
+（`POST /v1/files/upload`，purpose `video_generation_input`）取 `file_id`，再以
+`mm_file://{file_id}` 云端引用提交——字节**不进**宿主 RPC，因此**不占**≤12MB / ≤16MB
+的内联传输预算。
+
+**回落语义。** 上传路径被接受需同时满足：HTTP 2xx、`base_resp.status_code === 0`、
+响应含 `file.file_id`。任一不满足（未授权、网络差异、接口拒绝、4xx/5xx）→ 记一条
+`logger.warn`，**本素材自动回落 base64 内联**（仍受传输预算约束），**不使整单失败**。
+回落是设计内的正常分支，不是错误。Files 上传与 `mm_file://` 兼容性在多站点的差异
+见 [docs/known-limitations.md](docs/known-limitations.md)。
+
+Files API 同样落 `api.minimax.cn`（已在白名单），不需新增出站域。
 
 ## 5. 能力矩阵
 
@@ -142,6 +174,21 @@ App 不向上述以外的任何主机发起请求，也不启动任何本地服�
 
 两个工具共享视频侧的唯一凭证解析器与字节提取实现，并同样受传输预算与 30 秒 RPC 上限约束
 （详见 [docs/known-limitations.md](docs/known-limitations.md)）。
+
+### 宿主发音通道与两条流水线
+
+除模型工具外，本次新增三个能力面（均**零新增权限**，见 §3）：
+
+| 能力 | 入口 | 形态 |
+|---|---|---|
+| **宿主发音通道** | 宿主 `media_generate-speech` | 语音经**运行时能力源**发布 `speechGeneration`，并注册一个 `types:["speech"]` 适配器（`minimax-speech-tts`）；宿主语音目录里即可选到 MiniMax 音色 / 模型 |
+| **声音克隆** | `scripts/ext-voice-clone.mjs` | 隐藏扩展（**不**注册为模型工具）：上传样本（purpose `voice_clone`）→ `POST /v1/voice_clone` → 登记音色表 |
+| **长篇异步 TTS** | `scripts/ext-async-tts.mjs` | 隐藏扩展（**不**注册为模型工具）：分章切片 → `POST /v1/t2a_async_v2` → 轮询 → 取回音频与 SRT |
+
+宿主语音通道的已知音频格式集合为 `["mp3","wav","pcm","ogg_opus"]`，**不含 `flac`**；
+故经 `media_generate-speech` 暴露的语音模型只声明 `mp3` / `wav` / `pcm`，`flac` 仅保留在
+模型工具 `minimax_text_to_speech` 直连路径。三条工作流的完整用法见 App Skill
+`minimax-studio`。
 
 ## 6. 视频再生成（2K）
 
@@ -215,6 +262,49 @@ H3-Context-IR 做多模态上下文理解，产出结构化的**增强提示词*
 该链路由一个离线单测 `tests/audio-video-linkage.test.mjs` 锁定（媒体生成与 Context-IR 两个
 消费端都覆盖）。
 
+### 8.1 宿主发音通道
+
+除模型工具外，语音还以**运行时能力源**发布 `speechGeneration`，并注册一个
+`types:["speech"]` 适配器（`minimax-speech-tts`）。宿主的全局发音入口
+`media_generate-speech` 会按 `speech_generation` 目录选中它，用户无需知道有专用工具。
+
+- 适配器描述符声明 `formats: ["mp3","wav","pcm"]`、`speedMin: 0.5` / `speedMax: 2`；
+  `submit` 复用既有 `speech-client.mjs` 的合成实现，产物写 `ctx.generatedDir`，
+  返回 `{ taskId, files:[fileName] }`。
+- 宿主通道只支持 `mp3` / `wav` / `pcm`（不含 `flac`）；请求 `flac` 会**明确报错**，
+  不会静默降级。需要 `flac` 时用模型工具 `minimax_text_to_speech`。
+- 凭证与视频共用 `minimax-token-plan` lane；注册失败只记日志，不阻断 App 加载。
+
+### 8.2 声音克隆（CLI）
+
+用脚本 `scripts/ext-voice-clone.mjs` 把一段样本音克隆为可复用音色：
+
+```powershell
+$env:MINIMAX_API_KEY="<你的key>"; node scripts/ext-voice-clone.mjs <sample> --voice-id my-voice [--label "名"] [--data-dir <目录>]
+```
+
+样本格式限 `mp3` / `m4a` / `wav`，时长 10 秒–5 分钟，体积 ≤20MB（**本地先校验**，不满足
+直接报错、不联网）；流程：上传（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone`
+→ 登记 `{data-dir}/voices.json`（默认脚本旁 `./.minimax-data`；运行时为 `ctx.dataDir`）。
+stdout **末行**为单行 JSON（`{"ok":true,"voice":{...}}` / `{"ok":false,"error":{...}}`），
+退出码 0/1。用返回的 `voiceId` 作为 `minimax_text_to_speech` 的 `voice_id`。
+
+### 8.3 长篇异步 TTS（CLI）
+
+用脚本 `scripts/ext-async-tts.mjs` 把整本书分章异步合成：
+
+```powershell
+$env:MINIMAX_API_KEY="<key>"; node scripts/ext-async-tts.mjs book.txt --subtitle --voice-id <id> --out-dir <目录>
+```
+
+流程：按章节标题切片 → 逐片 `POST /v1/t2a_async_v2`（超长片经 `t2a_async_input` 上传）
+→ `GET /v1/query/t2a_async_query_v2?task_id=` 轮询 → 完成后 `GET /v1/files/retrieve_content`
+取音频（`--subtitle` 时另取 SRT）。**切片互不牵连**：单片失败只记在该片。stdout 末行为
+单行 JSON。轮询间隔下界 1000ms（查询接口限流 10 次/秒）；成品下载 URL 约 9 小时有效。
+
+两个脚本都**不在安装包内**，需从仓库 `scripts/` 获取；均只从 `MINIMAX_API_KEY`
+环境变量读 key，不落盘、不回显。完整工作流（含失败处置）见 App Skill `minimax-studio`。
+
 ## 9. 常见问题
 
 | 现象 | 原因 | 处理 |
@@ -231,12 +321,18 @@ H3-Context-IR 做多模态上下文理解，产出结构化的**增强提示词*
 | TTS 返回了文件路径，但合成报错或未落盘 | 上游 `base_resp.status_code != 0`（限流 / 余额等），或凭证不可用 | 错误文本已脱敏并带状态码；按提示检查供应商凭证或稍后重试（见 §3） |
 | ASR 报「音频文件超出传输限制」 | 本地 / 远端音频超过单文件 ≤12MB | 压缩或裁剪音频后再试（见 §8 / [docs/known-limitations.md](docs/known-limitations.md)） |
 | ASR 的 `minimax_speech_to_text` 用公网 URL 失败 | `audio_url` 仅在 `allowedHosts` 放行的域内可取回 | 改用本地路径，或确认 URL 落在声明域内（见 §4 / §8） |
+| `media_generate-speech` 选不到 MiniMax | 语音能力源未就绪（凭证 lane 抛错）或 App 未装载 | 配好 MiniMax Token Plan 供应商；确认 App 已装载且未因凭证缺失置灰（见 §3 / §8.1） |
+| 参考素材上传后仍报「超出传输限制」 | 上传不可用，已回落 base64，本素材仍受 ≤12MB / ≤16MB 预算 | 压缩素材；或确认 Files API 在所用站点可用（见 §4.1 / [docs/known-limitations.md](docs/known-limitations.md)） |
+| `ext-voice-clone.mjs` 报 `invalid_sample` | 样本格式 / 时长 / 体积不满足约束 | 改 mp3/m4a/wav、10 秒–5 分钟、≤20MB（见 §8.2） |
+| `ext-async-tts.mjs` 报 `POLL_TIMEOUT` / `FETCH_FAILED` | 单片轮询超时 / 成品取回失败 | 提高 `--timeout`，或重跑该片；下载 URL 约 9 小时过期后需重新取回（见 §8.3） |
 
 ## 10. 更多文档
 
+- [skills/minimax-studio/SKILL.md](skills/minimax-studio/SKILL.md) — App Skill：三条多模态工作流（图音视流 / 声音克隆向导 / 长篇有声化）
+- [skills/minimax-2k-workflow/SKILL.md](skills/minimax-2k-workflow/SKILL.md) — App Skill：2K 高质量链路（增强提示词 → 生成 → 升 2K）
 - [docs/credential-mechanism.md](docs/credential-mechanism.md) — 凭证 lane 与面板状态的技术机制（为何 lane 只能写在运行时快照、面板三分语义）
 - [docs/user-scripts.md](docs/user-scripts.md) — 用户脚本（冒烟测试、找回已完成任务的产物；脚本不在安装包内，需从仓库获取）
-- [docs/known-limitations.md](docs/known-limitations.md) — 已知限制（传输预算、语音预算与超时约束、再生成与增强工具约束、CDN 依赖）
+- [docs/known-limitations.md](docs/known-limitations.md) — 已知限制（传输预算与 Files 回落、语音双通道、克隆与异步 TTS 约束、CDN 依赖）
 - [docs/test-report.md](docs/test-report.md) — 自测报告（环境、测试步骤与结果、已知问题）
 - [CHANGELOG.md](CHANGELOG.md) — 版本变更记录
 
