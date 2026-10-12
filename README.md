@@ -1,18 +1,22 @@
-# MiniMax 视频生成（Hana v2 App）
+# MiniMax 音视频生成（Hana v2 App）
 
-**这是什么。** 一个纯后端的 Hana 媒体 provider：把 MiniMax H3 的视频生成 REST 接口
-（`POST /v2/video_generation`）接进 Hana 的媒体系统。装上并授权后，Agent 的
-`media_describe-options` 能看到 `minimax-video` 的两个模型，`media_generate-video`
-能直接调用它；提交 → 轮询 → 下载 → 发布全部由本 App 完成，成品落在宿主的
-`generatedDir` 里。
+**这是什么。** 一个纯后端的 Hana 音视频套件：把 MiniMax H3 的视频生成 REST 接口
+（`POST /v2/video_generation`）接进 Hana 的媒体系统，并以模型工具形式暴露
+H3-Context-IR 提示词增强、Speech-2.8-HD 语音合成（TTS）与 ASR-1.0 语音识别（STT）。
+装上并授权后，Agent 的 `media_describe-options` 能看到 `minimax-video` 的两个模型，
+`media_generate-video` 能直接调用它；同时模型可以调用 `minimax_context_ir` /
+`minimax_text_to_speech` / `minimax_speech_to_text` 三个工具。视频的
+提交 → 轮询 → 下载 → 发布全部由本 App 完成，成品落在宿主的 `generatedDir` 里；
+TTS 产物写入同一生成目录，可被后续的视频 / Context-IR 请求直接引用。
 
-没有 UI、没有设置页、没有卡片 —— 它是一个媒体提供方，另带一个模型工具
-（`minimax_context_ir`，见 §7），不是一个面板。
-**凭证不由本 App 保存**：直接使用本机已配置的 **MiniMax Token Plan** 供应商凭证。
+没有 UI、没有设置页、没有卡片 —— 它是一个媒体提供方，另带三个模型工具
+（`minimax_context_ir` / `minimax_text_to_speech` / `minimax_speech_to_text`）。
+**凭证不由本 App 保存**：视频与语音都直接使用本机已配置的 **MiniMax Token Plan**
+供应商凭证，无需二次配置。
 
 - **App id**：`minimax-video`
 - **图标**：`assets/icon.svg`
-- **当前版本**：`0.2.0`
+- **当前版本**：`0.3.0`（视频 + 语音全模态套件）
 
 ---
 
@@ -22,9 +26,14 @@
   多模态参考（图 + 视频 + 音频）；并支持把已生成的 768P 成片**升级为 2K**（§6）。
 - 用模型工具 `minimax_context_ir` 把粗糙提示词交给 H3-Context-IR **增强**，
   增强结果自动回到会话，可用于后续生成或再生成（§7）。
-- 由一个 adapter（`minimax-video-videos`）+ 一个运行时能力源（静态模型表）+
-  一个模型工具组成，不贡献任何设置项。
-- 不持有任何独立凭证：每次调用都从 **MiniMax Token Plan 供应商**取凭证（见 §3）。
+- 用模型工具 `minimax_text_to_speech` 合成语音（Speech-2.8-HD / T2A V2），产物写入
+  生成目录，返回的本地路径可直接作为视频参考音频（§8）。
+- 用模型工具 `minimax_speech_to_text` 把本地音频或公网 URL 转写为文本 / 分段时间戳
+  / SRT / VTT（§8）。
+- 由一个 adapter（`minimax-video-videos`）+ 一个运行时能力源（静态模型表）+ 三个模型
+  工具组成，不贡献任何设置项。
+- 不持有任何独立凭证：视频与语音每次调用都从 **MiniMax Token Plan 供应商**取凭证
+  （见 §3）。
 
 ## 2. 安装与启用
 
@@ -32,7 +41,9 @@
    直接加载本插件目录。
 2. 安装时按提示批准六项能力（见 §3）。`app/media.provide` 或
    `app/provider.credentials.read` 缺失时对应功能不可用（注册失败只记日志，不阻断 App）；
-   `minimax_context_ir` 依赖新增的三项能力，其中模型工具开关默认关闭（见 §3 / §7）。
+   三个模型工具（`minimax_context_ir` / `minimax_text_to_speech` / 
+   `minimax_speech_to_text`）依赖 `app/tools.expose-to-model` 等能力，其中模型工具开关
+   默认关闭（见 §3 / §7 / §8）。
 3. 在 设置 → 供应商 里确保 MiniMax Token Plan 已配置（见 §3）。
 
 **验证。**
@@ -60,14 +71,16 @@
 | `app/media.provide` | 注册媒体适配器与运行时能力源（`ctx.media.registerAdapter` / `registerCapabilitySource`）。没有它，provider 不会出现。 |
 | `app/provider.credentials.read` | 向宿主取回 MiniMax Token Plan 供应商的凭证（`provider:credentials`）。这是本 App 的**唯一**凭证来源，没有它无法生成。 |
 | `app/resources.read` | 读取会话内的参考图 / 视频 / 音频（图生视频、多模态参考、再生成与增强工具的素材读取）。没有它，带参考素材的请求会明确报错。 |
-| `app/tools.expose-to-model` | 将 `minimax_context_ir` 暴露给模型调用（模型工具通道）。开关默认关闭，需在 设置 → 安全 → 应用能力 里为本应用单独打开，模型才能主动调用它。 |
+| `app/tools.expose-to-model` | 将 `minimax_context_ir` / `minimax_text_to_speech` / `minimax_speech_to_text` 暴露给模型调用（模型工具通道）。开关默认关闭，需在 设置 → 安全 → 应用能力 里为本应用单独打开，模型才能主动调用它们。 |
 | `app/tasks.manage` | 增强工具创建 / 结算宿主任务（异步增强结果的承载通道）。 |
 | `app/session.start-turn` | 增强任务完成时把结果投递回会话（会话唤醒）。 |
 
 六项都需要用户在 **设置 → 应用 → 应用权限**（安装时也会确认）里批准。`app/media.provide`
 与 `app/provider.credentials.read` 是硬门：缺失时 provider 不出现或无凭证可用。后三项
-服务于 `minimax_context_ir`（§7）：其中 `app/tools.expose-to-model` 的模型工具开关
-**默认关闭**，要在 **设置 → 安全 → 应用能力** 中为本应用单独打开，模型才能调用该工具。
+服务于三个模型工具（§7 / §8）：其中 `app/tools.expose-to-model` 的模型工具开关
+**默认关闭**，要在 **设置 → 安全 → 应用能力** 中为本应用单独打开，模型才能调用这些工具。
+语音工具（TTS / ASR）复用视频侧已有的 `app/resources.read`（本地音频读取）与
+`app/provider.credentials.read`（共享凭证）——合并后**未新增任何能力**。
 
 ### 凭证怎么取
 
@@ -95,6 +108,9 @@
 请求方式仅 `GET` / `POST`；单次 `network.fetch` 上限 30 秒、单条响应上限 512 MiB。
 App 不向上述以外的任何主机发起请求，也不启动任何本地服务。
 
+语音工具复用同一组出站域：TTS（`POST /v1/t2a_v2`）与 ASR（`POST /v1/speech_to_text`）
+均落在 `api.minimax.cn`，无需新增白名单。
+
 ## 5. 能力矩阵
 
 两个模型、共六种模式；五种生成模式两者共有，「2K 再生成」仅 `MiniMax-H3` 支持：
@@ -116,6 +132,16 @@ App 不向上述以外的任何主机发起请求，也不启动任何本地服�
 图生视频与多模态参考互斥（由模式天然隔离）。比例：除文生视频外一律 `adaptive`
 （i2v / 首尾帧由输入图决定；多模态参考缺省 `adaptive`，也可显式指定）；再生成
 没有时长 / 比例参数，由源片决定。
+
+### 语音能力矩阵（模型工具）
+
+| 模型工具 | 能力 | 端点 | 备注 |
+|---|---|---|---|
+| `minimax_text_to_speech` | TTS 语音合成 | `POST /v1/t2a_v2` | 模型 `speech-2.8-hd`（默认）/ `speech-2.8-turbo` 等；支持语速 / 音调 / 音量、停顿标签 `<#秒数#>`、语气词 `(laughs)`、字幕时间戳；产物格式 `mp3` / `wav` / `flac` / `pcm` |
+| `minimax_speech_to_text` | ASR 语音识别 | `POST /v1/speech_to_text` | 模型 `asr-1.0`；输入本地音频（≤12MB，经宿主资源通道）或公网 URL；输出 `json` / `verbose_json` / `srt` / `vtt` |
+
+两个工具共享视频侧的唯一凭证解析器与字节提取实现，并同样受传输预算与 30 秒 RPC 上限约束
+（详见 [docs/known-limitations.md](docs/known-limitations.md)）。
 
 ## 6. 视频再生成（2K）
 
@@ -159,7 +185,37 @@ H3-Context-IR 做多模态上下文理解，产出结构化的**增强提示词*
 三项能力（见 §3）；其中模型工具开关**默认关闭**，先在 **设置 → 安全 → 应用能力**
 为本应用打开，模型才能调用。工具仅支持在会话中调用。
 
-## 8. 常见问题
+## 8. 语音合成与语音识别
+
+本 App 在视频能力之外，另提供两个语音模型工具，与视频共用同一凭证与同一生成目录：
+
+- **`minimax_text_to_speech`（TTS）**：用 MiniMax 语音大模型（Speech-2.8-HD / T2A V2）
+  把文本合成为语音。参数：`text` 必填；可选 `voice_id`（内置常用音色预设，也可传自定义/复刻
+  音色 ID）、`model`、`speed` / `vol` / `pitch`、`format`（`mp3` / `wav` / `flac` / `pcm`）、
+  `sound_effects`、`subtitle_enable`。文本可含停顿标签 `<#秒数#>` 与语气词 `(laughs)` /
+  `(sighs)` 等。产物写入生成目录，返回的 `filePath` 可直接作为视频参考音频引用。
+- **`minimax_speech_to_text`（ASR）**：用 ASR-1.0 转录音频。参数：`audio_path`（本地文件，
+  经宿主资源通道读取，单文件 ≤12MB）或 `audio_url`（须在 `allowedHosts` 放行的域内）
+  二选一；`response_format` 可取 `json` / `verbose_json` / `srt` / `vtt`；`model` 默认 `asr-1.0`。
+
+两个工具与视频一样：`network.fetch` 由宿主注入（缺失即报错，**不回退** `globalThis.fetch`）；
+`details` 只返回可序列化原语（不含原始 `Buffer` / 原始错误体），长转写的分段会截断并标注；
+所有出站请求的 `timeoutMs` ≤ 30 秒。
+
+### 推荐用法：先配音 → 作为 H3 参考音频
+
+把 TTS 产出的本地路径直接回喂给视频链路，无需任何中间适配器：
+
+1. 用 `minimax_text_to_speech` 合成一段旁白，记下返回的 `filePath`；
+2. 在 `media_generate-video` 的**多模态参考**（`multimodal2video`）里，把该路径作为
+   `referenceAudios` 传入；或在 `minimax_context_ir` 里以 `{ kind: "local-file", path }`
+   引用其作为 `referenceAudios` 做分镜规划。
+
+产物落在与视频同一生成目录，字节受相同的传输预算约束（单文件 ≤12MB、总量 ≤16MB）；
+该链路由一个离线单测 `tests/audio-video-linkage.test.mjs` 锁定（媒体生成与 Context-IR 两个
+消费端都覆盖）。
+
+## 9. 常见问题
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
@@ -171,17 +227,20 @@ H3-Context-IR 做多模态上下文理解，产出结构化的**增强提示词*
 | 2K 再生成报「白名单」或「源任务不符」类错误 | `source_task_id` 方式要求 MiniMax 白名单、源任务属本账号且已成功、且在 7 天内（服务端强制） | 核对源任务；或改用 `base_video` 方式（带源视频并重现原 prompt 与素材，见 §6） |
 | 2K 再生成报「源视频超出传输限制」 | 源视频按本地字节内联，超出单文件 ≤12MB 预算 | 改用 `source_task_id`（零上传），或压缩源视频（见 §6） |
 | 增强工具返回「已提交」后一直没收到增强提示词 | 增强是异步的，结果稍后自动送达；期间 App 重载会中断在途轮询 | 再等一会儿；若 App 重载过，重新提交一次（见 §7） |
-| 模型无法调用 `minimax_context_ir` | 模型工具开关默认关闭 | 在 设置 → 安全 → 应用能力 里为本应用打开开关（见 §3 / §7） |
+| 模型无法调用 `minimax_context_ir` / TTS / ASR 工具 | 模型工具开关默认关闭 | 在 设置 → 安全 → 应用能力 里为本应用打开开关（见 §3 / §7 / §8） |
+| TTS 返回了文件路径，但合成报错或未落盘 | 上游 `base_resp.status_code != 0`（限流 / 余额等），或凭证不可用 | 错误文本已脱敏并带状态码；按提示检查供应商凭证或稍后重试（见 §3） |
+| ASR 报「音频文件超出传输限制」 | 本地 / 远端音频超过单文件 ≤12MB | 压缩或裁剪音频后再试（见 §8 / [docs/known-limitations.md](docs/known-limitations.md)） |
+| ASR 的 `minimax_speech_to_text` 用公网 URL 失败 | `audio_url` 仅在 `allowedHosts` 放行的域内可取回 | 改用本地路径，或确认 URL 落在声明域内（见 §4 / §8） |
 
-## 9. 更多文档
+## 10. 更多文档
 
 - [docs/credential-mechanism.md](docs/credential-mechanism.md) — 凭证 lane 与面板状态的技术机制（为何 lane 只能写在运行时快照、面板三分语义）
 - [docs/user-scripts.md](docs/user-scripts.md) — 用户脚本（冒烟测试、找回已完成任务的产物；脚本不在安装包内，需从仓库获取）
-- [docs/known-limitations.md](docs/known-limitations.md) — 已知限制（传输预算、再生成与增强工具约束、CDN 依赖、超时约束）
+- [docs/known-limitations.md](docs/known-limitations.md) — 已知限制（传输预算、语音预算与超时约束、再生成与增强工具约束、CDN 依赖）
 - [docs/test-report.md](docs/test-report.md) — 自测报告（环境、测试步骤与结果、已知问题）
 - [CHANGELOG.md](CHANGELOG.md) — 版本变更记录
 
-## 10. License
+## 11. License
 
 本项目采用 [MIT 许可证](LICENSE)。
 

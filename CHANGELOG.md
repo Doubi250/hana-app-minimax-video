@@ -2,6 +2,35 @@
 
 本 App 的所有重要变更记录在此文件。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.3.0] - 2026-10-12
+
+### 新增
+
+- **语音合成工具 `minimax_text_to_speech`（TTS）**：并入原 `minimax-speech` 实验插件的语音输出能力，采用 MiniMax Speech-2.8-HD / T2A V2（`POST /v1/t2a_v2`）。支持语速 / 音调 / 音量、停顿标签 `<#秒数#>`、语气词 `(laughs)` / `(sighs)`、字幕时间戳；产物写入与媒体管线同一生成目录（`ctx.generatedDir`），返回的本地路径可直接作为视频参考音频。
+- **语音识别工具 `minimax_speech_to_text`（ASR）**：转入 ASR-1.0（`POST /v1/speech_to_text`）。输入本地音频（经宿主资源通道，单文件 ≤12MB）或公网 URL，输出 `json` / `verbose_json` / `srt` / `vtt`。
+- **音视频联动**：TTS 产物路径可直接回喂为 H3 视频生成（`referenceAudios`）或 H3-Context-IR 的参考音频，**无需新增媒体适配器**；由新增测试 `tests/audio-video-linkage.test.mjs` 锁定（媒体生成 + Context-IR 两消费端）。
+
+### 修正
+
+并入时修复了独立 review 确认的语音插件缺陷（详见 `outputs/2026-10/minimax-speech/REVIEW.md`）：
+
+- **`details` 携带原始 `Buffer` 的 blocker**：TTS 工具曾把客户端结果整体 spread 进 `details`，把原始音频 `Buffer` 与 `subtitles` 跨宿主 32MiB JSON-RPC 边界——文件已落盘却报失败。现 `details` 只承载可序列化原语（`filePath` / `durationSeconds` / `sampleRate` / `wordCount` / `format` / `bytes`）。
+- **ASR 本地 / 远端音频无输入大小约束**：`MAX_ASR_FILE_BYTES` 曾是死代码。现先 `resources.stat` 预检 → 读 → 读后复校 → 计入总量预算，超限明确报错。
+- **网络桥绕行**：两个工具缺注入 `fetch` 时曾回退 `globalThis.fetch`（绕开宿主网络桥与 `allowedHosts`）。现缺失即抛错，不回退。
+- **srt/vtt 把 API 错误当成功字幕**：格式分支曾在 `base_resp.status_code` 校验之前返回。现先校验错误信封再做格式分支。
+- **60000ms 超时**：超出宿主硬 30s RPC 上限。现 manifest `defaultTimeoutMs` 与所有 `timeoutMs` 均 ≤30000，音频下载为 28000。
+- **字节提取 / 凭证解析去重**：丢弃语音自带的 `auth.mjs` 与分歧的 `extractBytes`，两工具改用视频侧的唯一实现；ASR/TTS 扩展名由归一化格式派生，避免容器与扩展名不一致。
+
+### 变更
+
+- **manifest**：`name` / `description` 更新以反映音视频双能力；`version` 升至 `0.3.0`。能力集**经核对无需增补**（两个语音工具复用视频已有的 `app/tools.expose-to-model` / `app/provider.credentials.read` / `app/resources.read`）；`network.allowedHosts` 不变（语音落在已有的 `api.minimax.cn`）。
+- **README**：新增“§8 语音合成与语音识别”，补入语音能力矩阵与“先配音 → 作为 H3 参考音频”推荐用法；能力 / 权限与凭证说明按合并后更新。
+- **docs**：`known-limitations` / `test-report` 补注语音的传输预算与超时约束。
+
+### 测试
+
+- 新增 `tests/audio-video-linkage.test.mjs`（2 条音视频联动用例）；`tests/context-ir.test.mjs` 的 manifest 守卫更新为 0.3.0 + 六项能力 + 超时上限。全套 **175/175** 离线绿灯（视频 125 + 语音 50）。
+
 ## [0.2.0] - 2026-10-11
 
 ### 新增

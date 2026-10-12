@@ -14,6 +14,13 @@
   ≤12MB / ≤16MB 传输预算，公网 URL 不占预算。
 - **下载依赖 CDN 支持 Range 分片**（8MB 一片）。服务器忽略 `Range` 时走整段下载，
   单次 RPC 仍受 30 秒限制 —— 大文件可能因此超时失败，可稍后重试。
+- **语音工具（TTS / ASR）的预算与超时约束**：
+  - 单次 `network.fetch` 硬上限 30 秒同样适用于语音：TTS（`/v1/t2a_v2`）与 ASR
+    （`/v1/speech_to_text`）的请求超时均为 30000ms，`audio_url` 下载为 28000ms。
+  - ASR 本地音频经宿主的 `resources.stat` → 读 → 读后复校 → 总量预算链，**单文件
+    ≤12MB**；超限时在 stat 处即报错（不读入内存）。`audio_url` 也按同一上限约束。
+  - TTS 合成音频内联在响应体里（hex），响应上限放宽但仍在 `MAX_TTS_RESPONSE_BYTES`
+    之内；返回的 `filePath` 作为后续参考音频时，与其他素材共享 ≤12MB / ≤16MB 预算。
 - 下载总大小保护上限 1GB。
 - **成品视频从 MiniMax 侧 CDN 下载**（实测为 `*.aliyuncs.com`），故 `network.allowedHosts`
   需覆盖该域；CDN 域名变更时须同步更新白名单（出站域清单见 README §4）。

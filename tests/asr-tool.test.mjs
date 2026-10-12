@@ -2,8 +2,11 @@
  * tests/asr-tool.test.mjs — `node --test tests/asr-tool.test.mjs`
  *
  * The `minimax_speech_to_text` model tool, through the seams this ticket
- * pre-agreed, plus the linkage lock that ties TTS output to the video request
- * body.
+ * pre-agreed.
+ *
+ * (The audio → video linkage lock — a TTS output path fed back in as reference
+ * audio — lives in `tests/audio-video-linkage.test.mjs`, which covers both
+ * consumers: the media-generation body and the H3-Context-IR body.)
  *
  * The three review blockers pinned here:
  *   - the local-file path must `resources.stat` first, reject over
@@ -371,52 +374,4 @@ test("execute: 既无 audio_path 也无 audio_url 时明确报错", async () => 
 
   await assert.rejects(() => tool.execute({}), /audio_path 或 audio_url/);
   assert.equal(calls.count, 0);
-});
-
-/* 8. linkage lock: TTS output path → video reference audio ---------- */
-
-test("linkage: TTS 产物路径可作为参考音频进入视频请求体", async () => {
-  const { createTtsTool } = await import(pathToFileURL(path.join(appRoot, "lib", "tts-tool.mjs")));
-  const { buildCreateRequestBody, MODEL_SPECS } = await import(
-    pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
-  );
-
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "minimax-link-"));
-  const audioBytes = Buffer.from("synthesised-voice-bytes");
-  const ttsFetchStub = async () => ({
-    ok: true,
-    status: 200,
-    text: async () =>
-      JSON.stringify({
-        data: { audio: audioBytes.toString("hex"), status: 2 },
-        extra_info: { audio_length: 1000, audio_sample_rate: 32000, audio_format: "mp3", word_count: 3 },
-        base_resp: { status_code: 0, status_msg: "success" },
-      }),
-  });
-  const tts = createTtsTool({ network: { fetch: ttsFetchStub }, bus: fakeBus(), generatedDir: dir });
-  const synth = await tts.execute({ text: "旁白文本" });
-
-  // The TTS output path is the input the video pipeline reads back.
-  const ttsPath = synth.details.filePath;
-  assert.ok(ttsPath, "TTS 产出本地路径");
-  assert.equal(synth.details.format, "mp3");
-
-  const body = await buildCreateRequestBody({
-    params: {
-      prompt: "配上刚合成的旁白",
-      mode: "multimodal2video",
-      referenceAudios: [ttsPath],
-    },
-    modelSpec: MODEL_SPECS["MiniMax-H3"],
-    readReference: (ref) => fs.readFile(ref.kind === "local-file" ? ref.path : ref),
-    statReference: async () => null,
-  });
-
-  const audioItem = body.content.find((item) => item.role === "reference_audio");
-  assert.ok(audioItem, "参考音频进入请求体");
-  assert.equal(audioItem.type, "audio_url");
-  assert.ok(audioItem.audio_url.url.startsWith("data:audio/mpeg;base64,"));
-  // 内联的字节正是 TTS 写下的音频。
-  const inlined = Buffer.from(audioItem.audio_url.url.split(",")[1], "base64");
-  assert.deepEqual(inlined, audioBytes);
 });
