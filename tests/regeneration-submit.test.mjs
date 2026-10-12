@@ -71,9 +71,12 @@ test("adapter: a base_video regeneration posts the reproduced content to /v2/vid
     {},
   );
   assert.equal(result.taskId, "t-42");
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, REGENERATION_URL);
-  const sent = JSON.parse(calls[0].init.body);
+  // Reference materials are now upload-first: the mock answers the Files upload
+  // endpoint with a non-envelope body, so each upload misses and the builder
+  // falls back to inline base64. The regeneration POST itself is unchanged.
+  const createCalls = calls.filter((c) => c.url === REGENERATION_URL);
+  assert.equal(createCalls.length, 1);
+  const sent = JSON.parse(createCalls[0].init.body);
   assert.equal(sent.resolution, "2K");
   assert.equal(sent.source_task_id, undefined);
   assert.equal(sent.content[0].type, "text");
