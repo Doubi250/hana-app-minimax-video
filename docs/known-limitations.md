@@ -13,6 +13,8 @@
     兼容性**未经真机验证**——因此回落分支是设计内的正常形态，不是失败。若站点不接受
     Files，所有素材自动走 base64，功能不失效（只是不再省 RPC 字节）。
   - 上传失败**不会**降级为“整单失败”，也不会回退 `globalThis.fetch` 绕开宿主网络桥。
+  - **上传路径单文件上限（20MB）**：上传路径的单文件上限是 20MB，且这是**宿主 RPC 信封**约束（不是 MiniMax API 限制）。宿主 `ctx.network.fetch` 的请求体是整段 base64 进单条 RPC 信封（上限 32 MiB，base64 膨胀 1.33x，原始字节天花板约 24 MiB，取 20MB 留余量）。API 自身对 `video_generation_input` 的图/视频/音频分别允许 30/50/15MB，但在单条信封下无法送达。超限时明确报错且不回落。
+- **网络响应走流式分片（64KiB）**：宿主 `serializeResponse` 对网络响应采用 `bodyStreamId` 流式分片（64KiB），响应体不受单条 32 MiB 信封约束，因此 Files API 检索内容（如异步 TTS 的成品音频与字幕）采用 32MB 响应上限安全合理。
 - **2K 再生成（`regeneration` 模式，仅 `MiniMax-H3`）**：输出固定 2K，时长与比例由
   源片决定。`source_task_id` 方式有三个服务端硬条件——账号在 MiniMax 白名单内、
   源任务属本账号、且为 **7 天内**已成功（`succeeded`）的任务；不满足时 API 报错
