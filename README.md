@@ -302,8 +302,11 @@ $env:MINIMAX_API_KEY="<key>"; node scripts/ext-async-tts.mjs book.txt --subtitle
 取音频（`--subtitle` 时另取 SRT）。**切片互不牵连**：单片失败只记在该片。stdout 末行为
 单行 JSON。轮询间隔下界 1000ms（查询接口限流 10 次/秒）；成品下载 URL 约 9 小时有效。
 
-两个脚本都**不在安装包内**，需从仓库 `scripts/` 获取；均只从 `MINIMAX_API_KEY`
-环境变量读 key，不落盘、不回显。完整工作流（含失败处置）见 App Skill `minimax-studio`。
+两个脚本都**随应用安装包分发于 `scripts/` 目录**（安装后位于
+`{HANA_HOME}/apps/minimax-video/scripts/`），仓库中亦可获取；均只从 `MINIMAX_API_KEY`
+环境变量读 key，不落盘、不回显。它们**不经宿主的 `provider:credentials` 门取凭据**
+（与 App 运行时取凭证的路径不同），而是独立调试 / 批处理工具。
+完整工作流（含失败处置）见 App Skill `minimax-studio`。
 
 ## 9. 常见问题
 
@@ -331,7 +334,7 @@ $env:MINIMAX_API_KEY="<key>"; node scripts/ext-async-tts.mjs book.txt --subtitle
 - [skills/minimax-studio/SKILL.md](skills/minimax-studio/SKILL.md) — App Skill：三条多模态工作流（图音视流 / 声音克隆向导 / 长篇有声化）
 - [skills/minimax-2k-workflow/SKILL.md](skills/minimax-2k-workflow/SKILL.md) — App Skill：2K 高质量链路（增强提示词 → 生成 → 升 2K）
 - [docs/credential-mechanism.md](docs/credential-mechanism.md) — 凭证 lane 与面板状态的技术机制（为何 lane 只能写在运行时快照、面板三分语义）
-- [docs/user-scripts.md](docs/user-scripts.md) — 用户脚本（冒烟测试、找回已完成任务的产物；脚本不在安装包内，需从仓库获取）
+- [docs/user-scripts.md](docs/user-scripts.md) — 用户脚本（冒烟测试、找回已完成任务的产物、声音克隆、长篇异步 TTS、泄漏扫描；随安装包分发于 `scripts/`，仓库中亦可获取）
 - [docs/known-limitations.md](docs/known-limitations.md) — 已知限制（传输预算与 Files 回落、语音双通道、克隆与异步 TTS 约束、CDN 依赖）
 - [docs/test-report.md](docs/test-report.md) — 自测报告（环境、测试步骤与结果、已知问题）
 - [CHANGELOG.md](CHANGELOG.md) — 版本变更记录

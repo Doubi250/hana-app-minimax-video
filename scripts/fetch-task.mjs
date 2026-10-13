@@ -19,6 +19,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { API_BASE_URL, QUERY_PATH_PREFIX } from "../lib/minimax-api.mjs";
 import { createMinimaxClient, downloadToFile } from "../lib/minimax-client.mjs";
+import { scrub } from "../lib/http-util.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,12 +39,6 @@ const USAGE = [
   "",
   "退出码：0 已下载；1 用法/查询错误；2 未完成或已失败。",
 ].join("\n");
-
-function scrub(text) {
-  return String(text ?? "")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=_-]+/gi, "Bearer [redacted]")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-[redacted]");
-}
 
 function log(message) {
   process.stdout.write(`${scrub(message)}\n`);

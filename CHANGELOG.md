@@ -22,12 +22,15 @@
 ### 修正
 
 - **Code Review 双轴收口**：上传路径引入 20MB 单文件上限护栏（防止超限爆 RPC 错误且明确提示）、`PROVIDER_VERSION` 常量同步至 0.3.1 并增加快照与清单一致性断言、请求头装配与错误脱敏（`withAuth` / `scrub`）单源化至 `lib/http-util.mjs`。
+- **CLI 脱敏单源与真实超时**：`scripts/` 下四个脚本各自维护的 `scrub` 副本收拢为 `lib/http-util.mjs` 的同一函数引用（其中一个副本的正则漏掉 `-` / `_`，是真实泄漏口）；两个 CLI 的 `fetch` 注入点统一经 `withTimeout` 包装，用 `AbortSignal.timeout` 兜底宿主私有的 `timeoutMs`（网络假死不再永久阻塞）。
+- **文档校正**：脚本分发描述由「不在安装包内」改为「随安装包分发于 `scripts/`」；`docs/user-scripts.md` 扩至覆盖 5 个脚本；用例计数同步为 281。
 
 ### 测试
 
 - 新增离线单测：`files-client.test.mjs`（上传 / 检索 / 错误信封）、`upload-fallback.test.mjs`（上传成功写 `mm_file://`、失败回落 base64、未注入时与 0.3.0 一致）、`speech-adapter.test.mjs`（注册形状、submit 落盘、凭证缺失报错）、`voice-registry.test.mjs`（原子写、损坏恢复、只写 dataDir）、`voice-clone-extension.test.mjs`、`extensions.test.mjs`（克隆与异步两条链路离线）、`cli-contract.test.mjs`（末行 JSON 契约）。
+- 新增 `cli-scrub-timeout.test.mjs`（10 项）：断言四个脚本的 `scrub` 与 `lib/http-util.mjs` 是同一函数引用、含 `-`/`_` 的 `sk-` 形态不再遗漏；以及两个 CLI 的 `withTimeout` 注入 `AbortSignal`、`timeoutMs` 到点中止、外部 `signal` 优先。
 - `tests/context-ir.test.mjs` 的 manifest 守卫随版本递增同步更新为 `0.3.1`（该断言与 manifest `version` 是硬耦合：历史上每次版本递增都同时改这一行）。
-- 全套 **261/261** 离线绿灯（视频 125 + 语音 50 + Studio 新增 86）。
+- 全套 **281/281** 离线绿灯（视频 125 + 语音 50 + Studio 新增 106）。
 
 ### 未真机验证的边界
 
