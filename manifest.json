@@ -33,7 +33,7 @@
     "providers": [
       {
         "id": "minimax-video",
-        "displayName": "MiniMax 视频",
+        "displayName": "Minimax",
         "authType": "none",
         "capabilities": {
           "chat": {
