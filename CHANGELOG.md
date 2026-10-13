@@ -4,6 +4,10 @@
 
 ## [0.3.2] - 2026-10-14
 
+### 新增
+
+- **发版流水线固化（`scripts/pack-release.mjs`）**：把手工重复多次的发版配方固化为一条命令——`git archive` 干净副本（断言无 `.git`）→ `node --test` → `validate-app.mjs --dir` → `extension-pack.mjs` → zip 严格扫描 → `validate-app.mjs --archive --smoke` →（可选）git bundle，末行输出单行 JSON 契约。硬约束：**绝不从 worktree / 克隆目录直接打包**（worktree 的 `.git` 是指针文件、携带本机绝对路径，`git ls-files` 不收录、`check-clean` 漏过、packer 会打进包），且 PowerShell 下先 `-o` 落 tar 再解档、禁止管道（管道会破坏二进制流）。发版步骤失败即停并打印失败步。
+
 ### 变更
 
 - **版本演进**：`manifest.json` 与 `PROVIDER_VERSION` 同步升至 `0.3.2`；README「当前版本」与自测报告的版本 / 安装产物字段一并更新。纯文档与版本号变更，**行为语义零变化**，`capabilities` 与 `allowedHosts` 均不变。
@@ -19,7 +23,7 @@
 
 ### 测试
 
-- 全套 **313 / 313** 离线绿灯（视频 126 + 语音 57 + Studio 130），全离线、不联网、不需 Key。`tests/context-ir.test.mjs` 的 manifest 守卫随版本递增同步更新为 `0.3.2`（该断言与 manifest `version` 硬耦合）。
+- 全套 **339 / 339** 离线绿灯（视频 126 + 语音 57 + Studio 156），全离线、不联网、不需 Key。新增 `tests/pack-release.test.mjs`（26 项）覆盖发版脚本的纯函数缝：参数解析、`resolveToolsRoot`（参数 > env > 目录发现，含「无匹配时报错并列出已试路径」）、`resolveNodeRuntime`（env > 平台缓存发现）、`scanText` / `scanZipEntries`（与 `check-clean.mjs` 规则对齐、`check-clean:allow` 豁免、`.git`/`.sdk` 条目、二进制跳过）、步骤失败即停。`tests/context-ir.test.mjs` 的 manifest 守卫随版本递增同步更新为 `0.3.2`（该断言与 manifest `version` 硬耦合）。
 
 ## [0.3.1] - 2026-10-13
 
