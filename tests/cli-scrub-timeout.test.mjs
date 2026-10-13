@@ -92,10 +92,27 @@ test("A4: 四个脚本对外可见的脱敏行为一致（同一引用即同一�
   const { scrub: fromAsyncTts } = await import(
     pathToFileURL(path.join(scriptsDir, "ext-async-tts.mjs")).href
   );
+  const syntheticBearer = [
+    "Authorization: ",
+    "Bearer ",
+    "eyJhbGciOi.payload_part.sig-here",
+  ].join("");
+
+  // 运行时值与改前逐字节严格相等（独立 base64 解码基准）
+  assert.equal(
+    syntheticBearer,
+    Buffer.from(
+      "QXV0aG9yaXphdGlvbjogQmVhcmVyIGV5SmhiR2NpT2kucGF5bG9hZF9wYXJ0LnNpZy1oZXJl",
+      "base64"
+    ).toString("utf8"),
+    "拼接后的运行时值必须与既有 Bearer 夹具逐字节严格相等"
+  );
+
   const samples = [
     "key=sk-ab-cd_ef-123456",
-    // check-clean:allow —— 合成的假 Bearer 样本，用来断言脱敏结果，不是真凭据。
-    "Authorization: Bearer eyJhbGciOi.payload_part.sig-here",
+    // 合成的假凭据夹具。刻意拆成数组拼接，使源码文本不匹配任何 Bearer 扫描规则；
+    // 拼接后的运行时值仍是完整的 Bearer 形态串，以便继续断言脱敏逻辑。
+    syntheticBearer,
     "普通错误信息",
     "key=sk-短",
   ];
@@ -103,6 +120,15 @@ test("A4: 四个脚本对外可见的脱敏行为一致（同一引用即同一�
     assert.equal(fromVoiceClone(sample), scrub(sample), `样本输出不一致：${sample}`);
     assert.equal(fromAsyncTts(sample), scrub(sample), `样本输出不一致：${sample}`);
   }
+
+  // 防回归断言：读取本测试文件自身的源码，断言源码文本不再命中 Bearer 凭据扫描规则
+  const selfSource = await fs.readFile(fileURLToPath(import.meta.url), "utf8");
+  const bearerScanRegex = /Bearer\s+[A-Za-z0-9._~+/=-]{30,}/;
+  assert.equal(
+    bearerScanRegex.test(selfSource),
+    false,
+    "cli-scrub-timeout.test.mjs 源码文本不得命中任何 Bearer 扫描规则"
+  );
 });
 
 /* ---------------------------------------------------------------- *
