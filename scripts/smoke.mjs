@@ -21,6 +21,7 @@ import {
   MODEL_SPECS,
   buildCreateRequestBody,
 } from "../lib/minimax-api.mjs";
+import { scrub } from "../lib/http-util.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const POLL_INTERVAL_MS = 10_000;
@@ -39,12 +40,6 @@ const USAGE = [
   "",
   "Key 只从环境变量读取，不落盘、不回显。",
 ].join("\n");
-
-function scrub(text) {
-  return String(text ?? "")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=_-]+/gi, "Bearer [redacted]")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-[redacted]");
-}
 
 function log(message) {
   process.stdout.write(`${scrub(message)}\n`);

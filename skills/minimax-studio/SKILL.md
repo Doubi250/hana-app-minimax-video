@@ -90,4 +90,4 @@ metadata:
 - **模型工具开关默认关闭**：`minimax_context_ir` / `minimax_text_to_speech` / `minimax_speech_to_text` 需在 设置 → 安全 → 应用能力 里为本应用打开，模型才能调用。
 - **凭证只有一条 lane**：所有能力都借本机 **MiniMax Token Plan** 供应商的凭证，不在 App 内二次配置。
 - **不写死私有 id**：模型 id、音色 id、路径都由调用时决定；本技能只固定公开的入口名与脚本名。
-- 两条 CLI 流水线**不在安装包内**——需从仓库 `scripts/` 获取。
+- 两条 CLI 流水线**随安装包分发于 `scripts/`**（安装后位于 `{HANA_HOME}/apps/minimax-video/scripts/`），仓库中亦可获取。

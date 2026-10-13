@@ -26,6 +26,9 @@ import {
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_POLL_TIMEOUT_MS,
 } from "../lib/extensions/async-tts.mjs";
+import { scrub } from "../lib/http-util.mjs";
+
+export { scrub };
 import { DEFAULT_TTS_MODEL, DEFAULT_TTS_FORMAT } from "../lib/speech-api.mjs";
 
 const USAGE = [
@@ -49,13 +52,6 @@ const USAGE = [
   "Key 只从 MINIMAX_API_KEY 环境变量读取，不落盘、不回显。",
 ].join("\n");
 
-function scrub(text) {
-  return String(text ?? "")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=_-]+/gi, "Bearer [redacted]")
-    .replace(/\bsk-[A-Za-z0-9]{6,}/g, "[redacted]");
-}
-
-/** 解析命令行参数。 */
 export function parseArgs(argv = []) {
   const opts = {
     textFile: undefined,
@@ -108,6 +104,18 @@ export function parseArgs(argv = []) {
   return opts;
 }
 
+/**
+ * 原生 fetch 不识别宿主私有的 timeoutMs；用 AbortSignal 兑现真实超时。
+ * init.signal 已提供时不覆盖（外部 signal 优先）。
+ */
+export function withTimeout(fetchImpl, defaultMs = 30000) {
+  return (url, init = {}) => {
+    const ms = Number.isFinite(init.timeoutMs) && init.timeoutMs > 0 ? init.timeoutMs : defaultMs;
+    const signal = init.signal ?? AbortSignal.timeout(ms);
+    return fetchImpl(url, { ...init, signal });
+  };
+}
+
 function emitJson(stream, payload) {
   stream.write(`${JSON.stringify(payload)}\n`);
 }
@@ -131,7 +139,6 @@ export async function main({
 } = {}) {
   const opts = parseArgs(argv);
   const log = (message) => stdout.write(`${scrub(message)}\n`);
-
   const apiKey = String(env?.MINIMAX_API_KEY ?? "").trim();
   if (!apiKey) {
     stderr.write(`${scrub(`缺少 MINIMAX_API_KEY 环境变量。\n\n${USAGE}`)}\n`);
@@ -159,7 +166,7 @@ export async function main({
   const outDir = opts.outDir || path.join(process.cwd(), "minimax-tts-out");
 
   try {
-    const extension = createAsyncTtsExtension({ fetch: fetchImpl, auth: { apiKey } });
+    const extension = createAsyncTtsExtension({ fetch: withTimeout(fetchImpl), auth: { apiKey } });
     const result = await extension.runJob({
       text,
       model: opts.model || DEFAULT_TTS_MODEL,

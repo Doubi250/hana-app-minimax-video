@@ -20,9 +20,24 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createVoiceCloneExtension, validateSample } from "../lib/extensions/voice-clone.mjs";
+import { scrub } from "../lib/http-util.mjs";
+
+export { scrub };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA_DIR = path.join(HERE, ".minimax-data");
+
+/**
+ * 原生 fetch 不识别宿主私有的 timeoutMs；用 AbortSignal 兑现真实超时。
+ * init.signal 已提供时不覆盖（外部 signal 优先）。
+ */
+export function withTimeout(fetchImpl, defaultMs = 30000) {
+  return (url, init = {}) => {
+    const ms = Number.isFinite(init.timeoutMs) && init.timeoutMs > 0 ? init.timeoutMs : defaultMs;
+    const signal = init.signal ?? AbortSignal.timeout(ms);
+    return fetchImpl(url, { ...init, signal });
+  };
+}
 
 const USAGE = [
   "MiniMax 声音克隆 — 把样本音克隆为可复用音色并登记音色表",
@@ -41,13 +56,6 @@ const USAGE = [
   "Key 只从环境变量读取，不落盘、不回显。",
   "stdout 末行为单行 JSON。退出码：0 成功，1 失败。",
 ].join("\n");
-
-/** 把凭据从任何文本里脱敏——进度行与错误消息都不回显 key。 */
-function scrub(text) {
-  return String(text ?? "")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=_-]+/gi, "Bearer [redacted]")
-    .replace(/\bsk-[A-Za-z0-9_-]{6,}/g, "[redacted]");
-}
 
 /** 人类进度行：一律走 stdout，末行由 emitResult 单独写 JSON。 */
 function log(message) {
@@ -134,7 +142,7 @@ async function main() {
   }
 
   const extension = createVoiceCloneExtension({
-    fetch: globalThis.fetch,
+    fetch: withTimeout(globalThis.fetch),
     dataDir,
   });
 
@@ -153,6 +161,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  fail("unexpected", error?.message || String(error));
-});
+// 只有直接运行该脚本时才走 CLI 入口；被 import（如契约测试）时不得触发。
+const invokedDirectly =
+  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+
+if (invokedDirectly) {
+  main().catch((error) => {
+    fail("unexpected", error?.message || String(error));
+  });
+}
