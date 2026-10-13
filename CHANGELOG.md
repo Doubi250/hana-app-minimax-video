@@ -10,6 +10,7 @@
 - **主仓库文档模块化并入**：README 由 331 行重构为「组成与能力四层 + 文档索引 + 许可证」的精简入口，正文按主题拆入 `docs/video-generation.md` / `speech-and-audio.md` / `audio-video-workflow.md` / `installation-and-permissions.md` / `test-and-tools.md` 五篇文档。
 - **品牌打磨**：manifest `name` 定为 `MiniMax 多媒体套件`、`displayName` 定为 `MiniMax`；视频适配器描述符 `name` 同步为 `MiniMax`。
 - **审计修正移植**：0.3.1 的四项审计收敛在旧 README 上的措辞修正，随重构一并移植到新落点（见下）。
+- **导航指针与宿主契约固化**：新增仓库根 `AGENTS.md`（导航指针：宿主契约 / 模块地图 / 发版 / 测试）与 `docs/host-contract-notes.md`（9 条宿主契约事实，每条带票号 + 日期 + 宿主版本出处，标注为活文档）。把两轮审查反复重新推导的宿主行为固化为单一查证点，`docs/known-limitations.md` 同步补一条语音取消限制。纯文档，**行为语义零变化**。
 
 ### 修正
 
