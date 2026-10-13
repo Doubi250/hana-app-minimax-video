@@ -1,4 +1,4 @@
-# Minimax 多媒体套件
+# MiniMax 多媒体套件
 
 一个纯后端的 Hana 全模态多媒体套件：把 MiniMax 视频生成与语音大模型接入 Hana 媒体子系统，并以模型工具形式暴露 H3-Context-IR 提示词增强、Speech-2.8-HD 语音合成与 ASR-1.0 语音识别。
 
