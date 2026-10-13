@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 import {
   ASYNC_TTS_CREATE_PATH,
@@ -239,6 +242,46 @@ test("submitSegments: 切片互不牵连——中间片失败不影响其余片"
   assert.equal(result.segments[1].taskId, null);
   assert.equal(result.segments[2].taskId, "t-3");
   assert.equal(createCount, 3, "失败片不得阻止后续片提交");
+});
+
+/* ---------------------------------------------------------------- *
+ * 信封语义（ticket 10 / D）：base_resp.status_code 缺失视为失败
+ * ---------------------------------------------------------------- */
+
+test("async-tts: base_resp.status_code 缺失（undefined）视为失败，不当作成功", async () => {
+  const mockFetch = async (url) => {
+    if (url.includes(ASYNC_TTS_CREATE_PATH)) {
+      // HTTP 200 但没有 base_resp——不是 MiniMax 的成功响应。
+      return jsonResponse({ task_id: "t-no-envelope" });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+  const ext = createAsyncTtsExtension({ fetch: mockFetch, auth: { apiKey: "k" } });
+  const result = await ext.submitSegments({ text: "x", directTextMaxChars: 1000 });
+
+  assert.ok(result.segments[0].error, "status_code 缺失必须记为失败");
+  assert.equal(result.segments[0].taskId, null);
+});
+
+test("async-tts: 查询响应缺 base_resp 同样抛错（undefined → 失败）", async () => {
+  const mockFetch = async () => jsonResponse({ task_id: "t", status: "Success", file_id: "a" });
+  const ext = createAsyncTtsExtension({ fetch: mockFetch, auth: { apiKey: "k" }, sleep: async () => {} });
+
+  await assert.rejects(() => ext.pollTask({ taskId: "t" }), /异步 TTS 查询失败/);
+});
+
+test("async-tts: unwrapEnvelope 语义与 assertBaseRespOk 单源一致", async () => {
+  const source = fs.readFileSync(path.join(appRoot, "lib", "extensions", "async-tts.mjs"), "utf8");
+  assert.match(
+    source,
+    /assertBaseRespOk\(json, \{ label \}\)/,
+    "async-tts 的 unwrapEnvelope 必须调用共享的 assertBaseRespOk",
+  );
+  assert.doesNotMatch(
+    source,
+    /code !== undefined && code !== null && code !== 0/,
+    "旧的（把 undefined 当成功的）判定必须已删除",
+  );
 });
 
 /* ---------------------------------------------------------------- *

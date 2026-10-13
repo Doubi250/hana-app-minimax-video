@@ -31,6 +31,9 @@ const { createMinimaxSpeechAdapter } = await import(
 const { buildCapabilitySnapshot } = await import(
   pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
 );
+const { registerVoice } = await import(
+  pathToFileURL(path.join(appRoot, "lib", "voice-registry.mjs"))
+);
 
 /** The format set the host knows; `flac` is deliberately absent (bundle constant `mft`). */
 const HOST_AUDIO_FORMATS = ["mp3", "wav", "pcm"];
@@ -170,6 +173,67 @@ test("submit: generatedDir 缺省回落 {dataDir}/generated", async () => {
 
   const stat = await fs.stat(path.join(dir, "generated", result.files[0]));
   assert.ok(stat.isFile());
+});
+
+/* voice 解析：命中改写，未命中透传（ticket 10 / B） ------------- */
+
+test("submit: params.voice 命中表内 label → 改写为对应 voiceId", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const adapter = createMinimaxSpeechAdapter({
+    network: { fetch },
+    bus: fakeBus(),
+    generatedDir: dir,
+    dataDir: dir,
+  });
+
+  await registerVoice(dir, { voiceId: "clone-host", label: "宿主音色" });
+  await adapter.submit({ text: "测试", voice: "宿主音色" }, {});
+
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "clone-host");
+});
+
+test("submit: params.voice 命中表内 voiceId → 保持不变", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const adapter = createMinimaxSpeechAdapter({
+    network: { fetch },
+    bus: fakeBus(),
+    generatedDir: dir,
+    dataDir: dir,
+  });
+
+  await registerVoice(dir, { voiceId: "clone-host", label: "宿主音色" });
+  await adapter.submit({ text: "测试", voice: "clone-host" }, {});
+
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "clone-host");
+});
+
+test("submit: params.voice 未命中表 → 原样透传（官方预设名不在表里是正常的）", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const adapter = createMinimaxSpeechAdapter({
+    network: { fetch },
+    bus: fakeBus(),
+    generatedDir: dir,
+    dataDir: dir,
+  });
+
+  // 表非空，但请求的是 MiniMax 官方预设名：必须透传，绝不报错。
+  await registerVoice(dir, { voiceId: "clone-host", label: "宿主音色" });
+  const result = await adapter.submit({ text: "测试", voice: "female-yujie" }, {});
+
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "female-yujie");
+  assert.equal(result.files.length, 1);
+});
+
+test("submit: dataDir 缺省时表读取不抛错，voice 直接透传", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const adapter = createMinimaxSpeechAdapter({ network: { fetch }, bus: fakeBus(), generatedDir: dir });
+
+  await adapter.submit({ text: "测试", voice: "presenter_male" }, {});
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "presenter_male");
 });
 
 /* 4. credential failure is explicit and early ----------------------- */

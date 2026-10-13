@@ -42,7 +42,7 @@ $env:MINIMAX_API_KEY="<你的key>"; node scripts/ext-voice-clone.mjs <sample> --
 ```
 
 - 样本格式限 `mp3` / `m4a` / `wav`，时长 10 秒–5 分钟，体积 ≤20MB（**本地先校验**，不满足直接报错、不联网）。
-- 流程：上传（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone` → 登记 `{data-dir}/voices.json`（默认脚本旁 `./.minimax-data`）。`--voice-id` 缺省时由 `file_id` 派生。
+- 流程：上传（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone` → 登记 `{data-dir}/voices.json`（缺省 `{HANA_HOME}/app-data/minimax-video`，即 App 运行时同一张表；`HANA_HOME` 缺省回落 `~/.hanako`）。`--voice-id` 缺省时由 `file_id` 派生。
 - stdout **末行**为单行 JSON（`{"ok":true,"voice":{...}}` / `{"ok":false,"error":{...}}`）；退出码 `0` 成功 / `1` 失败。
 - 脚本**只从环境变量读 key**，不落盘、不回显。
 

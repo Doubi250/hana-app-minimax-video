@@ -24,6 +24,9 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const { createTtsTool } = await import(
   pathToFileURL(path.join(appRoot, "lib", "tts-tool.mjs"))
 );
+const { registerVoice } = await import(
+  pathToFileURL(path.join(appRoot, "lib", "voice-registry.mjs"))
+);
 
 function fakeLogger() {
   return {
@@ -207,6 +210,97 @@ test("execute: 上游错误信封报错，且不落盘、不返回 Buffer", asyn
 
   await assert.rejects(() => tool.execute({ text: "测试" }), /1002|rate limit/);
   assert.deepEqual(await fs.readdir(dir), [], "错误路径不产生文件");
+});
+
+/* ---------------------------------------------------------------- *
+ * voiceRef：按本 App 音色表解析（ticket 10 / B）
+ * ---------------------------------------------------------------- */
+
+test("execute: voiceRef 命中 voiceId → 用其 voiceId 合成", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const tool = createTtsTool({ network: { fetch }, bus: fakeBus(), generatedDir: dir, dataDir: dir });
+
+  await registerVoice(dir, { voiceId: "clone-x", label: "我的音色" });
+  await tool.execute({ text: "你好", voiceRef: "clone-x" });
+
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "clone-x");
+});
+
+test("execute: voiceRef 命中 label → 解析为对应 voiceId", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const tool = createTtsTool({ network: { fetch }, bus: fakeBus(), generatedDir: dir, dataDir: dir });
+
+  await registerVoice(dir, { voiceId: "clone-y", label: "御姐复刻" });
+  await tool.execute({ text: "你好", voiceRef: "御姐复刻" });
+
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "clone-y");
+});
+
+test("execute: voiceRef 未命中 → 报参数错误并列出表中可用 label，不发请求", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const tool = createTtsTool({ network: { fetch }, bus: fakeBus(), generatedDir: dir, dataDir: dir });
+
+  await registerVoice(dir, { voiceId: "clone-z", label: "甲音色" });
+  await registerVoice(dir, { voiceId: "clone-w", label: "乙音色" });
+
+  await assert.rejects(
+    () => tool.execute({ text: "你好", voiceRef: "错字" }),
+    (err) => {
+      assert.match(err.message, /voiceRef/);
+      assert.match(err.message, /错字/);
+      assert.match(err.message, /甲音色/);
+      assert.match(err.message, /乙音色/);
+      return true;
+    },
+  );
+  assert.equal(calls.count, 0, "未命中不得静默透传、不得发请求");
+});
+
+test("execute: voiceRef 未命中且表为空 → 报错提示表为空", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const tool = createTtsTool({ network: { fetch }, bus: fakeBus(), generatedDir: dir, dataDir: dir });
+
+  await assert.rejects(
+    () => tool.execute({ text: "你好", voiceRef: "任何" }),
+    /空/,
+  );
+  assert.equal(calls.count, 0);
+});
+
+test("execute: 不提供 voiceRef 时 voice_id 路径与既有一致（零变化）", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const tool = createTtsTool({ network: { fetch }, bus: fakeBus(), generatedDir: dir, dataDir: dir });
+
+  // 表里有条目，但不给 voiceRef：仍应用 voice_id（或默认），不得因表存在而被解析。
+  await registerVoice(dir, { voiceId: "clone-ignored", label: "会被忽略" });
+  await tool.execute({ text: "你好", voice_id: "female-yujie" });
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "female-yujie");
+
+  await tool.execute({ text: "你好" });
+  assert.equal(calls.bodies[1].voice_setting.voice_id, "male-qn-qingse", "缺省音色不变");
+});
+
+test("execute: voiceRef 优先于 voice_id", async () => {
+  const dir = await tempDir();
+  const { fetch, calls } = ttsFetch();
+  const tool = createTtsTool({ network: { fetch }, bus: fakeBus(), generatedDir: dir, dataDir: dir });
+
+  await registerVoice(dir, { voiceId: "clone-priority", label: "优先" });
+  await tool.execute({ text: "你好", voice_id: "female-yujie", voiceRef: "优先" });
+  assert.equal(calls.bodies[0].voice_setting.voice_id, "clone-priority");
+});
+
+test("schema: 声明可选 voiceRef", () => {
+  const tool = createTtsTool({ network: { fetch: ttsFetch().fetch }, bus: fakeBus() });
+  const props = tool.parameters.properties;
+  assert.ok(props.voiceRef, "schema 必须声明 voiceRef");
+  assert.equal(props.voiceRef.type, "string");
+  assert.equal(tool.parameters.required.includes("voiceRef"), false, "voiceRef 为可选");
 });
 
 /* 注册：入口 apply(ctx) 把两个语音工具接上工具注册表 --------------- */
