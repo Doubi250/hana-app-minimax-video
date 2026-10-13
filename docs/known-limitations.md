@@ -4,7 +4,8 @@
   总量 ≤16MB**，超出会明确报错提示压缩。参考素材越大，提交越慢。
 - **Files 上传优先与回落（多站差异）**：本地参考图 / 视频 / 音频与 2K 再生成的源片
   **默认先经 Files API 上传**（`POST /v1/files/upload`）取 `file_id`，以 `mm_file://{file_id}`
-  云端引用提交（字节不进宿主 RPC、不占内联预算）。上传路径被接受需同时满足：HTTP 2xx、
+  云端引用提交（字节从**模型请求体**挪进独立的 Files 调用，不再受内联 data URL 预算约束；
+  上传体仍经宿主 RPC 的 32MiB 信封）。上传路径被接受需同时满足：HTTP 2xx、
   `base_resp.status_code === 0`、响应含 `file.file_id`。任一不满足（未授权、网络差异、
   接口拒绝、4xx/5xx）→ 记一条 `logger.warn`，**本素材自动回落 base64 内联**（仍受
   ≤12MB / ≤16MB 预算约束），**不使整单失败**。
@@ -37,7 +38,7 @@
 - 下载总大小保护上限 1GB。
 - **声音克隆的样本约束**：格式限 `mp3` / `m4a` / `wav`，时长 **10 秒–5 分钟**，体积 **≤20MB**。
   样本在**本地先校验**（读容器头测时长，不依赖外部解码器），不满足直接报错、不联网。
-  克隆后的音色登记在 `{dataDir}/voices.json`（CLI 默认脚本旁 `./.minimax-data`），
+  克隆后的音色登记在 `{dataDir}/voices.json`（CLI 缺省 `{HANA_HOME}/app-data/minimax-video`，与 App 运行时同一张表），
   **只写 `dataDir`**，绝不写安装目录。
 - **长篇异步 TTS 的轮询与有效期约束**：
   - 查询接口（`GET /v1/query/t2a_async_query_v2`）限流上限 **10 次/秒**，轮询间隔下界为

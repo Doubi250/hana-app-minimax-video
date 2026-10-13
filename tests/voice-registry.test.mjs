@@ -21,9 +21,15 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { VOICES_FILE_NAME, voicesFilePath, loadVoices, registerVoice, findVoice } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "voice-registry.mjs"))
-);
+const {
+  VOICES_FILE_NAME,
+  voicesFilePath,
+  loadVoices,
+  registerVoice,
+  findVoice,
+  resolveVoiceInput,
+  listVoiceLabels,
+} = await import(pathToFileURL(path.join(appRoot, "lib", "voice-registry.mjs")));
 
 async function tempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), "mms-voices-"));
@@ -160,6 +166,74 @@ test("registerVoice: 缺少 voiceId 即报错，且不创建文件", async () =>
   const dir = await tempDir();
   await assert.rejects(() => registerVoice(dir, { label: "无名" }), /voiceId/);
   assert.equal((await fs.readdir(dir)).length, 0);
+});
+
+/* ---------------------------------------------------------------- *
+ * resolveVoiceInput：运行时读取方（ticket 10 / B）
+ * ---------------------------------------------------------------- */
+
+function tableOf(...entries) {
+  return { version: 1, voices: entries };
+}
+
+test("resolveVoiceInput: 按 voiceId 命中返回该项 voiceId", () => {
+  const table = tableOf({ voiceId: "clone-abc", label: "我的音色" });
+  assert.equal(resolveVoiceInput(table, "clone-abc"), "clone-abc");
+});
+
+test("resolveVoiceInput: 按 label 命中返回对应 voiceId", () => {
+  const table = tableOf({ voiceId: "clone-abc", label: "我的音色" });
+  assert.equal(resolveVoiceInput(table, "我的音色"), "clone-abc");
+});
+
+test("resolveVoiceInput: 前后空白被 trim，大小写敏感", () => {
+  const table = tableOf({ voiceId: "Clone-ABC", label: "My Voice" });
+  assert.equal(resolveVoiceInput(table, "  Clone-ABC  "), "Clone-ABC");
+  assert.equal(resolveVoiceInput(table, "My Voice"), "Clone-ABC");
+  // 大小写不同即不命中。
+  assert.equal(resolveVoiceInput(table, "clone-abc"), null);
+  assert.equal(resolveVoiceInput(table, "my voice"), null);
+});
+
+test("resolveVoiceInput: 无表 / 空表 / 无命中 / 空输入一律返回 null", () => {
+  assert.equal(resolveVoiceInput(null, "x"), null);
+  assert.equal(resolveVoiceInput(undefined, "x"), null);
+  assert.equal(resolveVoiceInput({}, "x"), null);
+  assert.equal(resolveVoiceInput({ voices: {} }, "x"), null);
+  assert.equal(resolveVoiceInput(tableOf(), "x"), null);
+  assert.equal(resolveVoiceInput(tableOf({ voiceId: "v1", label: "名" }), "nope"), null);
+  assert.equal(resolveVoiceInput(tableOf({ voiceId: "v1" }), ""), null);
+  assert.equal(resolveVoiceInput(tableOf({ voiceId: "v1" }), "   "), null);
+  assert.equal(resolveVoiceInput(tableOf({ voiceId: "v1" }), undefined), null);
+  assert.equal(resolveVoiceInput(tableOf({ voiceId: "v1" }), 42), null);
+});
+
+test("resolveVoiceInput: 多条命中取先出现的一条（确定性）", () => {
+  const table = tableOf(
+    { voiceId: "v1", label: "重名" },
+    { voiceId: "v2", label: "重名" },
+  );
+  assert.equal(resolveVoiceInput(table, "重名"), "v1");
+});
+
+test("listVoiceLabels: 只回带非空 label（供报错提示可选值）", () => {
+  const table = tableOf(
+    { voiceId: "v1", label: "甲" },
+    { voiceId: "v2" },
+    { voiceId: "v3", label: "  " },
+    { voiceId: "v4", label: "乙" },
+  );
+  assert.deepEqual(listVoiceLabels(table), ["甲", "乙"]);
+  assert.deepEqual(listVoiceLabels(null), []);
+});
+
+test("resolveVoiceInput: 与真实音色表往返——registerVoice 后可解析", async () => {
+  const dir = await tempDir();
+  await registerVoice(dir, { voiceId: "clone-rt", label: "实时音色" });
+  const table = await loadVoices(dir);
+  assert.equal(resolveVoiceInput(table, "clone-rt"), "clone-rt");
+  assert.equal(resolveVoiceInput(table, "实时音色"), "clone-rt");
+  assert.equal(resolveVoiceInput(table, "不存在"), null);
 });
 
 async function exists(p) {

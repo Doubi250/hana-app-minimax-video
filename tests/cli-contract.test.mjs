@@ -23,6 +23,8 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const scriptPath = path.join(appRoot, "scripts", "ext-voice-clone.mjs");
 const loaderPath = path.join(appRoot, "tests", "helpers", "offline-fetch.mjs");
 
+const { resolveDataDir } = await import(pathToFileURL(scriptPath).href);
+
 async function tempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), "mms-cli-"));
 }
@@ -188,4 +190,62 @@ test("cli: key 不回显——stdout/stderr 不出现密钥明文", async () => 
 
   assert.equal(result.stdout.includes(secret), false, "stdout 不得回显 key");
   assert.equal(result.stderr.includes(secret), false, "stderr 不得回显 key");
+});
+
+/* ---------------------------------------------------------------- *
+ * A（ticket 10）：缺省音色表落点必须在安装目录之外，且与 App 运行时同一张表
+ * ---------------------------------------------------------------- */
+
+test("resolveDataDir: HANA_HOME 优先，落在 {HANA_HOME}/app-data/minimax-video", () => {
+  const dir = resolveDataDir({ env: { HANA_HOME: "C:\\fake-hana-home" }, homedir: () => "C:\\fake-user" });
+  assert.equal(dir, path.join("C:\\fake-hana-home", "app-data", "minimax-video"));
+});
+
+// check-clean:allow — 该字符串是产品约定的 HANA_HOME 缺省路径名（宿主文档口径），不是本机路径。
+test("resolveDataDir: HANA_HOME 缺失时回落 ~/.hanako/app-data/minimax-video", () => {
+  const dir = resolveDataDir({ env: {}, homedir: () => "C:\\fake-user" });
+  assert.equal(dir, path.join("C:\\fake-user", ".hanako", "app-data", "minimax-video"));
+  // 空串 / 全空白同样视为缺失。
+  assert.equal(
+    resolveDataDir({ env: { HANA_HOME: "   " }, homedir: () => "C:\\fake-user" }),
+    path.join("C:\\fake-user", ".hanako", "app-data", "minimax-video"),
+  );
+});
+
+test("resolveDataDir: 缺省落点绝不落在脚本所在的安装目录之下", async () => {
+  // 脚本位于 {HANA_HOME}/apps/minimax-video/scripts/；缺省 dataDir 不得在其之下。
+  const scriptsDir = path.dirname(scriptPath);
+  const defaultDir = resolveDataDir({ env: {}, homedir: () => "C:\\fake-user" });
+  const rel = path.relative(scriptsDir, defaultDir);
+  assert.ok(
+    rel.startsWith("..") || path.isAbsolute(rel),
+    `缺省落点 ${defaultDir} 不得位于安装目录 ${scriptsDir} 之下`,
+  );
+  // 源码中也不应再残留旧的 HERE/.minimax-data 缺省。
+  const source = await fs.readFile(scriptPath, "utf8");
+  assert.doesNotMatch(source, /path\.join\(HERE,\s*"\.minimax-data"\)/);
+});
+
+test("cli: 不给 --data-dir 时音色表落在 HANA_HOME 下的 app-data，不落安装目录", async () => {
+  const dir = await tempDir();
+  const samplePath = path.join(dir, "sample.wav");
+  await fs.writeFile(samplePath, wavBytes(30));
+  const hanaHome = path.join(dir, "hana-home");
+
+  const result = await runCli([samplePath, "--voice-id", "cli-default-voice"], {
+    env: { MINIMAX_API_KEY: "test-key", MMS_FAKE_MODE: "ok", HANA_HOME: hanaHome },
+  });
+
+  assert.equal(result.code, 0, `期望退出码 0，stderr=${result.stderr}`);
+  const parsed = parseLast(result.stdout);
+  assert.equal(parsed.ok, true);
+
+  const expected = path.join(hanaHome, "app-data", "minimax-video", "voices.json");
+  const stored = JSON.parse(await fs.readFile(expected, "utf8"));
+  assert.equal(stored.voices[0].voiceId, "cli-default-voice");
+
+  // 安装目录（脚本旁）绝不出现 voices.json / .minimax-data。
+  const installDirEntries = await fs.readdir(path.dirname(scriptPath));
+  assert.equal(installDirEntries.includes("voices.json"), false, "安装目录不得出现 voices.json");
+  assert.equal(installDirEntries.includes(".minimax-data"), false, "安装目录不得出现 .minimax-data");
 });

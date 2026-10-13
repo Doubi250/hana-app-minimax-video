@@ -16,6 +16,7 @@
  *   bash:        MINIMAX_API_KEY=<你的key> node scripts/ext-voice-clone.mjs <sample> --voice-id <id> [--label <名>] [--data-dir <目录>]
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -24,8 +25,23 @@ import { scrub } from "../lib/http-util.mjs";
 
 export { scrub };
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DATA_DIR = path.join(HERE, ".minimax-data");
+/**
+ * 音色表缺省落点：`{HANA_HOME}/app-data/minimax-video`——与 App 运行时读写的同一张表。
+ *
+ * 早先的缺省是脚本旁的 `./.minimax-data`。安装后脚本位于
+ * `{HANA_HOME}/apps/minimax-video/scripts/`，那正是 App 安装目录之下：用缺省参数跑 CLI
+ * 会把 `voices.json` 写进安装目录，违反 SPEC 红线（安装目录对 App 子进程只读，写它按
+ * blocker 处理）。缺省必须落在安装目录之外，且与 App 运行时同一处，克隆出的音色才
+ * 真正「登记进本 App 的音色表」。
+ *
+ * `HANA_HOME` 环境变量优先；缺省回落 `~/.hanako`（与宿主约定一致）。
+ */
+export function resolveDataDir({ env = process.env, homedir = os.homedir } = {}) {
+  const home = String(env?.HANA_HOME ?? "").trim() || path.join(String(homedir()), ".hanako");
+  return path.join(home, "app-data", "minimax-video");
+}
+
+const DEFAULT_DATA_DIR = resolveDataDir();
 
 /**
  * 原生 fetch 不识别宿主私有的 timeoutMs；用 AbortSignal 兑现真实超时。
@@ -51,7 +67,7 @@ const USAGE = [
   "  sample       样本音频路径（mp3 / m4a / wav，10 秒–5 分钟，≤20MB）",
   "  --voice-id   自定义音色 id（缺省由上传的 file_id 派生）",
   "  --label      音色显示名（缺省等于 voiceId）",
-  "  --data-dir   音色表落点（缺省 " + DEFAULT_DATA_DIR + "）",
+  "  --data-dir   音色表落点（缺省 " + DEFAULT_DATA_DIR + "，即 App 运行时同一张表）",
   "",
   "Key 只从环境变量读取，不落盘、不回显。",
   "stdout 末行为单行 JSON。退出码：0 成功，1 失败。",
@@ -118,6 +134,20 @@ async function main() {
 
   const samplePath = path.resolve(opts.sample);
   const dataDir = opts.dataDir ? path.resolve(opts.dataDir) : DEFAULT_DATA_DIR;
+
+  // 缺省落点按需创建（`mkdir -p`）：App 运行时目录可能尚未生成。显式 --data-dir 时
+  // 交由 registry 的原子写在需要时创建，避免在此对用户给定路径做多余副作用。
+  if (!opts.dataDir) {
+    try {
+      await fs.promises.mkdir(dataDir, { recursive: true });
+    } catch (error) {
+      fail(
+        "data_dir_unwritable",
+        `无法创建音色表目录：${dataDir}（${error?.code || error?.message}）`,
+      );
+      return;
+    }
+  }
 
   let bytes;
   try {

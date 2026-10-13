@@ -38,7 +38,9 @@ base64）；并提供**声音克隆**与**长篇异步 TTS** 两条 CLI 流水�
 - 把语音经**宿主全局发音通道**发布：`media_generate-speech` 能在语音目录里选到 MiniMax
   音色与模型，用户不必知道有专用工具（§8.1）。
 - 本地参考素材**默认先上传**（Files API）取 `file_id`，以 `mm_file://{file_id}` 云端引用
-  提交，字节不再进宿主 RPC；上传不可用时**自动回落 base64 内联**（§4.1）。
+  提交——字节从**模型请求体**挪进独立的 Files 调用（不再受内联 data URL 的 ≤12MB / ≤16MB
+  预算约束，模型请求体保持小巧）；上传体仍经宿主 RPC 的 32MiB 信封（`bodyBase64`），
+  上传不可用时**自动回落 base64 内联**（§4.1）。
 - 用 CLI `scripts/ext-voice-clone.mjs` 把一段样本音**克隆**成可复用音色并登记音色表
   （§8.2）；用 `scripts/ext-async-tts.mjs` 把整本书**分章异步合成**为音频与 SRT（§8.3）。
 - 由一个 adapter（`minimax-video-videos`）+ 一个语音 adapter（`minimax-speech-tts`）+ 一个
@@ -132,8 +134,10 @@ App 不向上述以外的任何主机发起请求，也不启动任何本地服�
 
 本地参考图 / 视频 / 音频（含 2K 再生成的源片）**默认先经 Files API 上传**
 （`POST /v1/files/upload`，purpose `video_generation_input`）取 `file_id`，再以
-`mm_file://{file_id}` 云端引用提交——字节**不进**宿主 RPC，因此**不占**≤12MB / ≤16MB
-的内联传输预算。
+`mm_file://{file_id}` 云端引用提交。上传**并不让字节离开宿主 RPC**——上传体仍以
+`bodyBase64` 进 32MiB 的单条 RPC 信封（20MB 上限正是按此信封算术设的：20MB×4/3≈27MB
+< 32MiB）。上传真正买到的是：字节从**模型请求体**挪进一个独立的 Files 调用，不再受
+内联 data URL 的 ≤12MB / ≤16MB 预算约束，模型请求体也保持小巧。
 
 **回落语义。** 上传路径被接受需同时满足：HTTP 2xx、`base_resp.status_code === 0`、
 响应含 `file.file_id`。任一不满足（未授权、网络差异、接口拒绝、4xx/5xx）→ 记一条
@@ -285,9 +289,9 @@ $env:MINIMAX_API_KEY="<你的key>"; node scripts/ext-voice-clone.mjs <sample> --
 
 样本格式限 `mp3` / `m4a` / `wav`，时长 10 秒–5 分钟，体积 ≤20MB（**本地先校验**，不满足
 直接报错、不联网）；流程：上传（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone`
-→ 登记 `{data-dir}/voices.json`（默认脚本旁 `./.minimax-data`；运行时为 `ctx.dataDir`）。
+→ 登记 `{data-dir}/voices.json`（缺省 `{HANA_HOME}/app-data/minimax-video`，与运行时 `ctx.dataDir` 同一张表）。
 stdout **末行**为单行 JSON（`{"ok":true,"voice":{...}}` / `{"ok":false,"error":{...}}`），
-退出码 0/1。用返回的 `voiceId` 作为 `minimax_text_to_speech` 的 `voice_id`。
+退出码 0/1。用返回的 `voiceId` 作为 `minimax_text_to_speech` 的 `voice_id`（也可用 `voiceRef` 按 `voiceId` 或 `label` 引用）。
 
 ### 8.3 长篇异步 TTS（CLI）
 

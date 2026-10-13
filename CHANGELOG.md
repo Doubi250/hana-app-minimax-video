@@ -6,7 +6,7 @@
 
 ### 新增
 
-- **Files 上传基建（默认先上传，失败回落）**：新增 `lib/files-client.mjs`（上传 / 检索 / 取内容）与共享的 `lib/multipart.mjs`。本地参考图 / 视频 / 音频（含 2K 再生成的源片）默认先经 `POST /v1/files/upload` 取 `file_id`，以 `mm_file://{file_id}` 云端引用提交，字节不再进宿主 RPC、不占 ≤12MB / ≤16MB 内联预算。上传不可用（未授权 / 网络差异 / 接口拒绝 / 4xx / 5xx）时**自动回落 base64 内联**，记一条 `logger.warn`，不使整单失败；未注入上传依赖时行为与 0.3.0 逐字节一致。
+- **Files 上传基建（默认先上传，失败回落）**：新增 `lib/files-client.mjs`（上传 / 检索 / 取内容）与共享的 `lib/multipart.mjs`。本地参考图 / 视频 / 音频（含 2K 再生成的源片）默认先经 `POST /v1/files/upload` 取 `file_id`，以 `mm_file://{file_id}` 云端引用提交。上传把字节从**模型请求体**挪进独立的 Files 调用（不再受内联 data URL 的 ≤12MB / ≤16MB 预算约束，模型请求体保持小巧），但上传体仍经宿主 RPC 的 32MiB 信封（`bodyBase64`）——20MB 单文件上限正是按此信封算术设的。上传不可用（未授权 / 网络差异 / 接口拒绝 / 4xx / 5xx）时**自动回落 base64 内联**，记一条 `logger.warn`，不使整单失败；未注入上传依赖时行为与 0.3.0 逐字节一致。
 - **宿主发音通道**：语音以**运行时能力源**发布 `media.speechGeneration`，并注册一个 `types:["speech"]` 适配器（`minimax-speech-tts`，`formats: mp3/wav/pcm`，`speed 0.5–2`）。宿主 `media_generate-speech` 能在语音目录里选中 MiniMax 音色；`flac` 不在宿主格式白名单内，请求即明确报错、不静默降级（需 `flac` 用模型工具 `minimax_text_to_speech`）。
 - **声音克隆（隐藏扩展 + CLI）**：新增 `lib/voice-registry.mjs`（音色表，只写 `dataDir`，原子写 + 损坏备份重建）与 `lib/extensions/voice-clone.mjs`；新增脚本 `scripts/ext-voice-clone.mjs`。样本限 mp3/m4a/wav、10 秒–5 分钟、≤20MB（本地先校验，不联网）。
 - **长篇异步 TTS（隐藏扩展 + CLI）**：新增 `lib/extensions/async-tts.mjs` 与脚本 `scripts/ext-async-tts.mjs`。按章节切片 → `POST /v1/t2a_async_v2` → 轮询 → `files/retrieve_content` 取音频（`--subtitle` 另取 SRT）；切片互不牵连。
@@ -21,9 +21,15 @@
 
 ### 修正
 
+- **审计收敛（ticket 10）**：四项必修收口。
+  - **CLI 缺省落点移出安装目录**：`scripts/ext-voice-clone.mjs` 的 `DEFAULT_DATA_DIR` 由「脚本旁 `./.minimax-data`」改为 `{HANA_HOME}/app-data/minimax-video`（`HANA_HOME` 优先，缺省回落 `~/.hanako`），与 App 运行时同一张表——安装后脚本位于 `{HANA_HOME}/apps/minimax-video/scripts/`，旧缺省会把 `voices.json` 写进安装目录（SPEC 红线）。
+  - **音色表接上运行时读取方**：`lib/voice-registry.mjs` 新增并导出纯函数 `resolveVoiceInput`（按 `voiceId` 或 `label` 精确匹配）/ `listVoiceLabels`；`minimax_text_to_speech` 新增可选参数 `voiceRef`（命中即用其 voiceId，未命中报参数错误并列出表中可用 label）；宿主 speech 适配器 `params.voice` 同样解析（命中改写、未命中原样透传，因宿主 voice 可能是 MiniMax 官方预设名）。
+  - **文档纠错**：README 与 CHANGELOG、known-limitations 中「上传后字节不再进宿主 RPC」的说法不实——上传体仍经 32MiB 信封（`bodyBase64`，20MB 上限即按此算术设）；上传真正买到的是字节从模型请求体挪进独立的 Files 调用、模型请求体保持小巧。
+  - **信封语义统一**：`lib/http-util.mjs` 新增 `assertBaseRespOk`（HTTP 2xx 且 `status_code === 0` 才算成功，`undefined` 视为失败），`lib/extensions/voice-clone.mjs` 与 `lib/extensions/async-tts.mjs` 两处 CLI 改用它——此前两处对 `undefined` 的判定相反。
+
 - **Code Review 双轴收口**：上传路径引入 20MB 单文件上限护栏（防止超限爆 RPC 错误且明确提示）、`PROVIDER_VERSION` 常量同步至 0.3.1 并增加快照与清单一致性断言、请求头装配与错误脱敏（`withAuth` / `scrub`）单源化至 `lib/http-util.mjs`。
 - **CLI 脱敏单源与真实超时**：`scripts/` 下四个脚本各自维护的 `scrub` 副本收拢为 `lib/http-util.mjs` 的同一函数引用（其中一个副本的正则漏掉 `-` / `_`，是真实泄漏口）；两个 CLI 的 `fetch` 注入点统一经 `withTimeout` 包装，用 `AbortSignal.timeout` 兜底宿主私有的 `timeoutMs`（网络假死不再永久阻塞）。
-- **文档校正**：脚本分发描述由「不在安装包内」改为「随安装包分发于 `scripts/`」；`docs/user-scripts.md` 扩至覆盖 5 个脚本；用例计数同步为 281。
+- **文档校正**：脚本分发描述由「不在安装包内」改为「随安装包分发于 `scripts/`」；`docs/user-scripts.md` 扩至覆盖 5 个脚本；用例计数同步为 313。
 
 ### 测试
 

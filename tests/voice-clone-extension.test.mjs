@@ -263,6 +263,52 @@ test("cloneVoice: 缺少注入 fetch 即抛错，不回退 globalThis.fetch", ()
   assert.throws(() => createVoiceCloneExtension({ fetch: null, dataDir: os.tmpdir() }), /fetch/);
 });
 
+/* ---------------------------------------------------------------- *
+ * 信封语义（ticket 10 / D）：base_resp.status_code 缺失视为失败
+ * ---------------------------------------------------------------- */
+
+test("cloneVoice: base_resp.status_code 缺失（undefined）视为失败，不登记音色", async () => {
+  const dir = await tempDir();
+  const fetch = async (url) => {
+    if (String(url).includes("/v1/files/upload")) {
+      return jsonResponse({
+        file: { file_id: "file-clone-1", bytes: 44, filename: "s.wav", purpose: "voice_clone" },
+        base_resp: { status_code: 0, status_msg: "success" },
+      });
+    }
+    // HTTP 200 + 有 voice_id，但没有 base_resp——不是 MiniMax 的成功响应。
+    return jsonResponse({ voice_id: "sneaky" });
+  };
+  const extension = createVoiceCloneExtension({ fetch, dataDir: dir });
+
+  await assert.rejects(
+    () => extension.cloneVoice({ auth: { apiKey: "k" }, bytes: wavBytes(30), fileName: "s.wav", voiceId: "v1" }),
+    /声音克隆失败/,
+  );
+  assert.equal(
+    await fs.access(voicesFilePath(dir)).then(() => true, () => false),
+    false,
+    "status_code 缺失不得登记音色",
+  );
+});
+
+test("cloneVoice: 信封判定与 assertBaseRespOk 单源一致", async () => {
+  const source = await fs.readFile(
+    path.join(appRoot, "lib", "extensions", "voice-clone.mjs"),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /assertBaseRespOk\(parseJson\(text\), \{ label: "声音克隆失败" \}\)/,
+    "voice-clone 必须调用共享的 assertBaseRespOk",
+  );
+  assert.doesNotMatch(
+    source,
+    /json\.base_resp\?\.status_code !== 0/,
+    "旧的本地信封判定必须已删除",
+  );
+});
+
 test("cloneVoice: voiceId 缺省由 file_id 派生，且落进音色表", async () => {
   const dir = await tempDir();
   const { fetch, calls } = cloneFetch();
