@@ -322,7 +322,7 @@ test("context-ir body: an empty reference list entry is rejected", async () => {
   );
 });
 
-test("manifest: 六项能力齐全且版本为 0.3.1（Studio 收口后仍未增补能力集）", () => {
+test("manifest: 六项能力齐全且版本为 0.3.2（Studio 收口后仍未增补能力集）", () => {
   const manifestPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   // The merged speech tools reuse the video app's existing grants — no addition.
@@ -336,7 +336,7 @@ test("manifest: 六项能力齐全且版本为 0.3.1（Studio 收口后仍未增
   ]) {
     assert.ok(manifest.capabilities.includes(capability), `missing capability: ${capability}`);
   }
-  assert.equal(manifest.version, "0.3.1", "v0.3.1 all-modal audio+video suite");
+  assert.equal(manifest.version, "0.3.2", "v0.3.2 all-modal audio+video suite");
   // 出站超时不得越过宿主 30s RPC 硬上限。
   assert.ok(manifest.network.defaultTimeoutMs <= 30000, "defaultTimeoutMs ≤ 30000");
 });

@@ -2,6 +2,25 @@
 
 本 App 的所有重要变更记录在此文件。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.3.2] - 2026-10-14
+
+### 变更
+
+- **版本演进**：`manifest.json` 与 `PROVIDER_VERSION` 同步升至 `0.3.2`；README「当前版本」与自测报告的版本 / 安装产物字段一并更新。纯文档与版本号变更，**行为语义零变化**，`capabilities` 与 `allowedHosts` 均不变。
+- **主仓库文档模块化并入**：README 由 331 行重构为「组成与能力四层 + 文档索引 + 许可证」的精简入口，正文按主题拆入 `docs/video-generation.md` / `speech-and-audio.md` / `audio-video-workflow.md` / `installation-and-permissions.md` / `test-and-tools.md` 五篇文档。
+- **品牌打磨**：manifest `name` 定为 `MiniMax 多媒体套件`、`displayName` 定为 `MiniMax`；视频适配器描述符 `name` 同步为 `MiniMax`。
+- **审计修正移植**：0.3.1 的四项审计收敛在旧 README 上的措辞修正，随重构一并移植到新落点（见下）。
+
+### 修正
+
+- **传输真相措辞（承接审计收敛）**：`docs/video-generation.md` §2 与 `skills/minimax-studio/SKILL.md` 中原「字节不进宿主 RPC」的措辞修正为如实表述——上传体仍以 `bodyBase64` 进 32MiB 的单条 RPC 信封（20MB 上限即按此算术设），上传真正买到的是字节从**模型请求体**挪进独立的 Files 调用、内联 data URL 预算不再约束、模型请求体保持小巧。
+- **CLI 缺省落点（承接审计收敛）**：`docs/test-and-tools.md` 与 `skills/minimax-studio/SKILL.md` 中 `ext-voice-clone.mjs` 的 `{data-dir}` 缺省说明由「脚本旁 `./.minimax-data`」更新为 `{HANA_HOME}/app-data/minimax-video`（与 App 运行时同一张表）。
+- **文档与契约对齐**：`docs/test-and-tools.md` 的用例计数由 281 同步为 **313**，两个 CLI 的调用示例与末行 JSON 契约按实际输出（`{"ok":true,"voice":{...}}` / `{"ok":true,"tasks":[...],"files":[...]}`）校正；`docs/audio-video-workflow.md` 的两个 CLI 示例改为位置参数形态。README 文档索引的测试计数同步为 313。
+
+### 测试
+
+- 全套 **313 / 313** 离线绿灯（视频 126 + 语音 57 + Studio 130），全离线、不联网、不需 Key。`tests/context-ir.test.mjs` 的 manifest 守卫随版本递增同步更新为 `0.3.2`（该断言与 manifest `version` 硬耦合）。
+
 ## [0.3.1] - 2026-10-13
 
 ### 新增
@@ -36,7 +55,7 @@
 - 新增离线单测：`files-client.test.mjs`（上传 / 检索 / 错误信封）、`upload-fallback.test.mjs`（上传成功写 `mm_file://`、失败回落 base64、未注入时与 0.3.0 一致）、`speech-adapter.test.mjs`（注册形状、submit 落盘、凭证缺失报错）、`voice-registry.test.mjs`（原子写、损坏恢复、只写 dataDir）、`voice-clone-extension.test.mjs`、`extensions.test.mjs`（克隆与异步两条链路离线）、`cli-contract.test.mjs`（末行 JSON 契约）。
 - 新增 `cli-scrub-timeout.test.mjs`（10 项）：断言四个脚本的 `scrub` 与 `lib/http-util.mjs` 是同一函数引用、含 `-`/`_` 的 `sk-` 形态不再遗漏；以及两个 CLI 的 `withTimeout` 注入 `AbortSignal`、`timeoutMs` 到点中止、外部 `signal` 优先。
 - `tests/context-ir.test.mjs` 的 manifest 守卫随版本递增同步更新为 `0.3.1`（该断言与 manifest `version` 是硬耦合：历史上每次版本递增都同时改这一行）。
-- 全套 **281/281** 离线绿灯（视频 125 + 语音 50 + Studio 新增 106）。
+- 全套 **313/313** 离线绿灯（视频 126 + 语音 57 + Studio 新增 130）。
 
 ### 未真机验证的边界
 

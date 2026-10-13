@@ -1,8 +1,8 @@
 {
   "manifestVersion": 2,
   "id": "minimax-video",
-  "name": "MiniMax 全模态音视频",
-  "version": "0.3.1",
+  "name": "MiniMax 多媒体套件",
+  "version": "0.3.2",
   "minAppVersion": "0.978.0",
   "description": "把 MiniMax H3 视频生成（文生 / 图生 / 多模态参考）接入 Hana 媒体系统，并以模型工具暴露 H3-Context-IR 提示词增强、Speech-2.8-HD 语音合成（TTS）与 ASR-1.0 语音识别；本地大素材默认先经 Files API 上传取 file_id（上传不可用时回落 base64），语音同时以宿主发音通道（media_generate-speech）与模型工具双通道发布，并提供声音克隆与长篇异步 TTS 两条 CLI 流水线。视频与语音共用本机的 MiniMax Token Plan 供应商凭证。",
   "entry": "index.mjs",
@@ -33,7 +33,7 @@
     "providers": [
       {
         "id": "minimax-video",
-        "displayName": "MiniMax 视频",
+        "displayName": "MiniMax",
         "authType": "none",
         "capabilities": {
           "chat": {

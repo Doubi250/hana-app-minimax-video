@@ -22,7 +22,7 @@ metadata:
 | 声音克隆 | 脚本 `scripts/ext-voice-clone.mjs` | 隐藏扩展，不注册为模型工具，只经 CLI 暴露 |
 | 长篇异步 TTS | 脚本 `scripts/ext-async-tts.mjs` | 隐藏扩展，分章切片 → 异步提交 → 批量取回音频与 SRT |
 
-**素材引用与回落。** 本地参考图 / 视频 / 音频默认先经 MiniMax Files API 上传取 `file_id`，以云端引用提交（字节不进宿主 RPC）；上传不可用（未授权、网络差异、接口拒绝）时**自动回落 base64 内联**，仍受单文件 ≤12MB、总量 ≤16MB 传输预算约束。回落是设计内的正常分支，不是失败。
+**素材引用与回落。** 本地参考图 / 视频 / 音频默认先经 MiniMax Files API 上传取 `file_id`，以云端引用提交。上传把字节从**模型请求体**挪进独立的 Files 调用（不再受内联 data URL 的 ≤12MB / ≤16MB 预算约束，单文件上限提至 20MB），但上传体仍经宿主 RPC 的 32MiB 信封（`bodyBase64`）。上传不可用（未授权、网络差异、接口拒绝）时**自动回落 base64 内联**，仍受单文件 ≤12MB、总量 ≤16MB 传输预算约束。回落是设计内的正常分支，不是失败。
 
 ---
 
@@ -54,7 +54,7 @@ metadata:
    $env:MINIMAX_API_KEY="<你的key>"; node scripts/ext-voice-clone.mjs <sample> --voice-id my-voice [--label "我的音色"] [--data-dir <目录>]
    ```
 
-   流程：上传样本（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone` → **自动登记** `{data-dir}/voices.json`（默认脚本旁 `./.minimax-data`）。`--voice-id` 缺省时由 `file_id` 派生。
+   流程：上传样本（purpose `voice_clone`）取 `file_id` → `POST /v1/voice_clone` → **自动登记** `{data-dir}/voices.json`（缺省 `{HANA_HOME}/app-data/minimax-video`，与 App 运行时同一张表）。`--voice-id` 缺省时由 `file_id` 派生。
 3. **读结果**。stdout **末行**严格为单行 JSON：成功 `{"ok":true,"voice":{"voiceId":"...","label":"..."}}`，失败 `{"ok":false,"error":{"code","message"}}`；退出码 0/1。用返回的 `voiceId` 作为后续合成参数。
 4. **合成**。把 `voiceId` 传给 `minimax_text_to_speech` 的 `voice_id`，或宿主 `media_generate-speech` 的音色选择。
 
