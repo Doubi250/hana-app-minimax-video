@@ -28,6 +28,13 @@
  *   falls back to `tap` (`# tests N`) and finally `spec`, so every runtime
  *   resolves the same number from whichever reporter it actually has.
  *
+ * KNOWN BLIND SPOT
+ *   Only the `<!-- test-count -->` total markers are guarded. The per-domain
+ *   subtotals in the docs (视频侧 / 语音侧 / Studio 侧, and the per-file
+ *   breakdowns beneath them) are still hand-maintained: this script neither
+ *   writes nor verifies them, so they can drift while --check stays green.
+ *   Extending the guard to cover them is future work, not a promise here.
+ *
  * OUTPUT CONTRACT
  *   Last stdout line is single-line JSON: {"ok":true,"total":N,"source":…,…}
  *   Exit codes: 0 in sync/clean, 1 drift (--check), 2 environment error.
