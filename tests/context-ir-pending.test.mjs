@@ -220,15 +220,15 @@ test("并发读 + 写不炸：读簿与结算写簿同时发生时不抛错（Wi
 });
 
 test("atomic-file: writeFileAtomic 覆盖既有内容且不留临时文件", async () => {
-  const { writeFileAtomic, readTextOrNull } = await import(
+  const { writeFileAtomic, readFileTextOrNull } = await import(
     pathToFileURL(path.join(appRoot, "lib", "atomic-file.mjs"))
   );
   const dir = await tempDir();
   const target = path.join(dir, "x.json");
   await writeFileAtomic(target, "first");
   await writeFileAtomic(target, "second");
-  assert.equal(await readTextOrNull(target), "second");
+  assert.equal(await readFileTextOrNull(target), "second");
   assert.deepEqual((await fs.readdir(dir)).sort(), ["x.json"]);
 
-  assert.equal(await readTextOrNull(path.join(dir, "missing.json")), null, "缺失 → null");
+  assert.equal(await readFileTextOrNull(path.join(dir, "missing.json")), null, "缺失 → null");
 });
