@@ -168,6 +168,41 @@ test("client: queryTask carries the credential and hits the query path", async (
   assert.equal(remote.mapped, "pending");
 });
 
+/* 信封判定：create/query 路径现在也查信封（T2） -------------------- */
+
+test("client: createTask 拒绝携带非 0 信封的 HTTP 200 响应", async () => {
+  const { fetch } = mockFetch(() => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ base_resp: { status_code: 1004, status_msg: "bad key" } }),
+  }));
+  const client = createMinimaxClient({ fetch });
+  await assert.rejects(
+    () => client.createTask({ auth: { apiKey: "k" }, body: {} }),
+    (err) => err.code === 1004 && /bad key/.test(err.message),
+  );
+});
+
+test("client: queryTask 拒绝携带非 0 信封的 HTTP 200 响应", async () => {
+  const { fetch } = mockFetch(() => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ base_resp: { status_code: 1002, status_msg: "rate limited" } }),
+  }));
+  const client = createMinimaxClient({ fetch });
+  await assert.rejects(
+    () => client.queryTask({ auth: { apiKey: "k" }, taskId: "t" }),
+    (err) => err.code === 1002 && /rate limited/.test(err.message),
+  );
+});
+
+test("client: 无信封但形状合法的响应仍被接受（不引入新的硬前置）", async () => {
+  const { fetch } = mockFetch(() => ({ ok: true, status: 200, text: async () => JSON.stringify({ task_id: "t1" }) }));
+  const client = createMinimaxClient({ fetch });
+  const { taskId } = await client.createTask({ auth: { apiKey: "k" }, body: {} });
+  assert.equal(taskId, "t1");
+});
+
 test("client: a legacy bare apiKey still works", async () => {
   const { calls, fetch } = mockFetch(() => OK_JSON);
   const client = createMinimaxClient({ fetch });
