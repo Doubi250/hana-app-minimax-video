@@ -27,5 +27,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Offline unit suite
         run: npm test
+      - name: Doc count guard
+        run: node scripts/sync-doc-counts.mjs --check
       - name: Machine-specific leak scan
         run: npm run check
