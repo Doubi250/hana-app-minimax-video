@@ -147,6 +147,8 @@ export async function apply(ctx) {
         bus: ctx.bus,
         tasks: ctx.tasks,
         resources: ctx.resources,
+        // 在途任务簿的唯一落点；装载时读回并恢复轮询（重载不再丢任务）。
+        dataDir: ctx.dataDir,
       }),
     );
   } catch (error) {

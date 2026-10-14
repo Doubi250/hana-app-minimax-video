@@ -7,12 +7,16 @@
  *     parameter schema) and the end-to-end execute path;
  *   - `createMinimaxContextIrTool` with injected fetch / tasks / bus and fast
  *     poll timings: the background lifecycle (submit → poll → settle), where
- *     the host task must always end settled (complete or fail).
+ *     the host task must always end settled (complete or fail);
+ *   - a real temp `dataDir`: the in-flight book round trip (create → fake reload
+ *     via a second tool instance → resume → settle).
  *
  * Everything is offline: the host, `fetch` and the task service are stubs.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -465,7 +469,7 @@ const { createMinimaxContextIrTool } = await import(
   pathToFileURL(path.join(appRoot, "lib", "context-ir-tool.mjs"))
 );
 
-function makeTool({ fetch, tasks, credentials, pollIntervalMs = 15, pollTimeoutMs = 5000 }) {
+function makeTool({ fetch, tasks, credentials, pollIntervalMs = 15, pollTimeoutMs = 5000, dataDir }) {
   return createMinimaxContextIrTool({
     network: { fetch },
     bus: fakeBus({ credentials }),
@@ -473,6 +477,7 @@ function makeTool({ fetch, tasks, credentials, pollIntervalMs = 15, pollTimeoutM
     logger: fakeLogger(),
     pollIntervalMs,
     pollTimeoutMs,
+    dataDir,
   });
 }
 
@@ -536,4 +541,276 @@ test("background: persistent network errors also end at the time cap, never hang
   await tool.execute({ prompt: "一只猫", context: { callToken: "t" } });
   await waitFor(() => tasks.failed.length === 1, { timeout: 2000 });
   assert.match(tasks.failed[0].error, /超时/);
+});
+
+/* 5. in-flight book: create → fake reload → resume → settle ------------- */
+
+const {
+  CONTEXT_IR_PENDING_FILE_NAME,
+  contextIrPendingFilePath,
+  loadPendingTasks,
+} = await import(pathToFileURL(path.join(appRoot, "lib", "context-ir-pending.mjs")));
+
+async function tempDataDir() {
+  return fs.mkdtemp(path.join(os.tmpdir(), "mms-ci-pending-"));
+}
+
+/** Settlement drops the book entry *after* the host task settles — wait for both. */
+async function waitForEmptyBook(dir) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 3000) {
+    if ((await loadPendingTasks(dir)).tasks.length === 0) return;
+    await sleep(10);
+  }
+  throw new Error("waitForEmptyBook: the book never emptied");
+}
+
+/**
+ * A `fetch` where the submit succeeds and the query NEVER settles.
+ *
+ * This is what an App reload looks like from the outside: the old poller is
+ * parked mid-round and will never touch the host task again, while the book on
+ * disk still names it. Parking on a bare never-resolving promise (no timer)
+ * keeps the test process able to exit.
+ */
+function submittingFetch({ submit = () => ({ task_id: "remote-1" }) } = {}) {
+  const calls = { submit: 0, query: 0 };
+  const fetch = async (url) => {
+    const target = String(url);
+    if (target.includes("/v2/h3_context_ir")) {
+      calls.submit += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify(submit()) };
+    }
+    if (target.includes("/v2/query/video_generation/")) {
+      calls.query += 1;
+      return new Promise(() => {});
+    }
+    throw new Error(`unexpected fetch: ${target}`);
+  };
+  return { fetch, calls };
+}
+
+/** A `fetch` that answers the query, recording the Authorization header it saw. */
+function recoveringFetch({ queries = [] } = {}) {
+  const calls = { query: 0, auth: [] };
+  const fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.includes("/v2/query/video_generation/")) {
+      const index = Math.min(calls.query, queries.length - 1);
+      calls.query += 1;
+      calls.auth.push(init.headers?.Authorization ?? null);
+      const payload = typeof queries[index] === "function" ? queries[index]() : queries[index];
+      if (payload instanceof Error) throw payload;
+      return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
+    }
+    throw new Error(`unexpected fetch: ${target}`);
+  };
+  return { fetch, calls };
+}
+
+/** Run one submit against a hanging poller, leaving an entry in the book. */
+async function createInFlightTask(dataDir, { hostTaskId = "host-task-1", pollTimeoutMs } = {}) {
+  const tasks = fakeTasks();
+  tasks.create = async (input) => {
+    tasks.created.push(input);
+    return { taskId: hostTaskId, scope: "session", delivery: input.delivery };
+  };
+  const { fetch } = submittingFetch();
+  const tool = makeTool({ fetch, tasks, dataDir, pollTimeoutMs });
+  await tool.execute({ prompt: "一只猫", context: { callToken: TOKEN } });
+  return { tasks, tool };
+}
+
+test("persistence: 创建任务后落到 {dataDir}/context-ir-pending.json（原子写，且只在 dataDir）", async () => {
+  const dir = await tempDataDir();
+  const elsewhere = await tempDataDir();
+  await createInFlightTask(dir);
+
+  const book = await loadPendingTasks(dir);
+  assert.equal(book.version, 1);
+  assert.equal(book.tasks.length, 1, "远端接受后即登记在途任务");
+  const entry = book.tasks[0];
+  assert.equal(entry.hostTaskId, "host-task-1");
+  assert.equal(entry.remoteTaskId, "remote-1");
+  assert.equal(typeof entry.createdAt, "number");
+  assert.ok(entry.deadlineAt > entry.createdAt, "deadlineAt 是 createdAt 之后的绝对时刻");
+
+  assert.deepEqual(
+    (await fs.readdir(dir)).sort(),
+    [CONTEXT_IR_PENDING_FILE_NAME],
+    "不留 *.tmp-* 临时文件",
+  );
+  assert.equal((await fs.readdir(elsewhere)).length, 0, "不向 dataDir 之外写");
+});
+
+test("persistence: 伪造重载后新实例接着轮询并完成结算（恢复成功）", async () => {
+  const dir = await tempDataDir();
+  const { tasks: oldTasks } = await createInFlightTask(dir);
+  assert.equal(oldTasks.completed.length, 0, "重载前旧实例还没结算");
+
+  // “重载”：新 tool 实例、同 dataDir、全新的凭证。
+  const tasks = fakeTasks();
+  const { fetch, calls } = recoveringFetch({
+    queries: [{ task: { status: "success", content: { prompt: "重载后拿到的增强提示词" } } }],
+  });
+  makeTool({ fetch, tasks, dataDir: dir, credentials: { apiKey: "k-after-reload" } });
+
+  await waitFor(() => tasks.completed.length === 1, { timeout: 3000 });
+  assert.equal(tasks.completed[0].taskId, "host-task-1");
+  assert.equal(
+    tasks.completed[0].result.text,
+    "H3-Context-IR 增强提示词：\n\n重载后拿到的增强提示词",
+  );
+  assert.equal(tasks.failed.length, 0);
+
+  // 凭证是每轮重新解析的：恢复轮的 Authorization 用的是新凭证。
+  assert.equal(calls.auth[0], "Bearer k-after-reload");
+
+  // 结算成功即从簿中删除。
+  await waitForEmptyBook(dir);
+});
+
+test("persistence: 重载后远端已失败 → 宿主任务判失败并从簿中删除", async () => {
+  const dir = await tempDataDir();
+  await createInFlightTask(dir);
+
+  const tasks = fakeTasks();
+  const { fetch } = recoveringFetch({
+    queries: [{ task: { status: "failed", error: { message: "内容审核未通过（重载后才发现）" } } }],
+  });
+  makeTool({ fetch, tasks, dataDir: dir });
+
+  await waitFor(() => tasks.failed.length === 1, { timeout: 3000 });
+  assert.match(tasks.failed[0].error, /内容审核未通过/);
+  assert.equal(tasks.completed.length, 0);
+  await waitForEmptyBook(dir);
+});
+
+test("persistence: 超时清理——deadlineAt 已过超 24h 的条目直接判失败、不入轮询、不碰网络", async () => {
+  const dir = await tempDataDir();
+  const stale = {
+    hostTaskId: "host-task-1",
+    remoteTaskId: "remote-1",
+    createdAt: Date.now() - 30 * 3600 * 1000,
+    deadlineAt: Date.now() - 25 * 3600 * 1000,
+  };
+  await fs.writeFile(
+    contextIrPendingFilePath(dir),
+    `${JSON.stringify({ version: 1, tasks: [stale] }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const tasks = fakeTasks();
+  const { fetch, calls } = recoveringFetch({ queries: [{ task: { status: "success", content: { prompt: "不该被取" } } }] });
+  makeTool({ fetch, tasks, dataDir: dir });
+
+  await waitFor(() => tasks.failed.length === 1, { timeout: 3000 });
+  assert.match(tasks.failed[0].error, /过期|24/);
+  assert.equal(tasks.completed.length, 0);
+  assert.equal(calls.query, 0, "过期条目不得再打网络");
+  await waitForEmptyBook(dir);
+});
+
+test("persistence: 过期条目判失败若结算本身失败，条目保留（下次重载重试，不静默丢弃）", async () => {
+  const dir = await tempDataDir();
+  const stale = {
+    hostTaskId: "host-task-1",
+    remoteTaskId: "remote-1",
+    createdAt: Date.now() - 30 * 3600 * 1000,
+    deadlineAt: Date.now() - 25 * 3600 * 1000,
+  };
+  await fs.writeFile(
+    contextIrPendingFilePath(dir),
+    `${JSON.stringify({ version: 1, tasks: [stale] }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const tasks = fakeTasks();
+  tasks.fail = async () => {
+    throw new Error("宿主不认识这个任务");
+  };
+  const { fetch, calls } = recoveringFetch({ queries: [] });
+  makeTool({ fetch, tasks, dataDir: dir });
+
+  await sleep(80);
+  assert.equal(calls.query, 0, "过期条目从不入轮询");
+  assert.equal((await loadPendingTasks(dir)).tasks.length, 1, "未结算成功的条目不得从簿中消失");
+});
+
+test("persistence: deadlineAt 已过但在 24h 内 → 仍然恢复（不是清理）", async () => {
+  const dir = await tempDataDir();
+  const recentlyExpired = {
+    hostTaskId: "host-task-1",
+    remoteTaskId: "remote-1",
+    createdAt: Date.now() - 2 * 3600 * 1000,
+    deadlineAt: Date.now() - 3600 * 1000, // 1 小时前过期，仍在 24h 窗口内
+  };
+  await fs.writeFile(
+    contextIrPendingFilePath(dir),
+    `${JSON.stringify({ version: 1, tasks: [recentlyExpired] }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const tasks = fakeTasks();
+  const { fetch, calls } = recoveringFetch({
+    queries: [{ task: { status: "success", content: { prompt: "迟到的增强提示词" } } }],
+  });
+  makeTool({ fetch, tasks, dataDir: dir });
+
+  await waitFor(() => tasks.completed.length === 1, { timeout: 3000 });
+  assert.equal(calls.query, 1, "窗口内仍要问一次远端");
+  assert.match(tasks.completed[0].result.text, /迟到的增强提示词/);
+});
+
+test("persistence: 重载恢复时凭证解析失败按瞬态处理，继续轮询到 deadline 才判失败", async () => {
+  const dir = await tempDataDir();
+  await createInFlightTask(dir, { pollTimeoutMs: 60 });
+
+  const tasks = fakeTasks();
+  const { fetch, calls } = recoveringFetch({ queries: [{ task: { status: "success", content: { prompt: "x" } } }] });
+  // 凭证不可用（例如用户正在改配置）：不得炸掉，也不能结算。
+  makeTool({ fetch, tasks, dataDir: dir, credentials: { error: "no_credentials" }, pollIntervalMs: 15, pollTimeoutMs: 60 });
+
+  await waitFor(() => tasks.failed.length === 1, { timeout: 3000 });
+  assert.match(tasks.failed[0].error, /超时/);
+  assert.equal(calls.query, 0, "无凭证时不出站");
+  await waitForEmptyBook(dir);
+});
+
+test("persistence: 没有 dataDir 时完全不落盘、也不因簿而入轮询", async () => {
+  const tasks = fakeTasks();
+  const { fetch, calls } = recoveringFetch({ queries: [{ task: { status: "success" } }] });
+  makeTool({ fetch, tasks }); // 无 dataDir
+  await sleep(50);
+  assert.equal(calls.query, 0);
+  assert.equal(tasks.failed.length, 0);
+  assert.equal(tasks.completed.length, 0);
+});
+
+test("persistence: 簿落点不可写（dataDir 指向一个文件）只记日志，不阻断工具创建", async () => {
+  const dir = await tempDataDir();
+  const blocked = path.join(dir, "not-a-dir");
+  await fs.writeFile(blocked, "occupied", "utf8");
+
+  const { fetch } = submittingFetch();
+  const tasks = fakeTasks();
+  let tool;
+  assert.doesNotThrow(() => {
+    tool = makeTool({ fetch, tasks, dataDir: blocked });
+  });
+  // 落盘失败不阻断提交：宿主任务照常创建与结算。
+  await tool.execute({ prompt: "一只猫", context: { callToken: TOKEN } });
+  assert.equal(tasks.created.length, 1);
+  assert.equal(await fs.readFile(blocked, "utf8"), "occupied", "既不是目录就不该被改成目录");
+});
+
+test("apply: 装载时把 dataDir 交给 context-ir 工具（损坏簿不阻断 apply）", async () => {
+  const dir = await tempDataDir();
+  await fs.writeFile(contextIrPendingFilePath(dir), "{ broken", "utf8");
+
+  const { fetch } = contextIrFetch({});
+  const { ctx, calls } = hostStub({ fetch });
+  ctx.dataDir = dir;
+  await apply(ctx);
+  assert.equal(calls.tools.length, 3, "簿损坏不影响工具注册");
 });
