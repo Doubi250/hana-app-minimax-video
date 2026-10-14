@@ -299,7 +299,7 @@ test("cloneVoice: 信封判定与 assertBaseRespOk 单源一致", async () => {
   );
   assert.match(
     source,
-    /assertBaseRespOk\(parseJson\(text\), \{ label: "声音克隆失败" \}\)/,
+    /assertBaseRespOk\(parseJsonSafe\(text\), \{ label: "声音克隆失败" \}\)/,
     "voice-clone 必须调用共享的 assertBaseRespOk",
   );
   assert.doesNotMatch(
