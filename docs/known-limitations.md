@@ -51,8 +51,10 @@
   - 成品下载 URL（`download_url`）有约 **9 小时有效期**；过期后需重新取回（重新查询任务
     取新的 URL，或经 `files/retrieve_content` 直接取内容）。
   - 切片之间互不牵连：单片提交 / 轮询 / 取回失败只记在该片记录上，不影响其余片。
-- **成品视频从 MiniMax 侧 CDN 下载**（实测为 `*.aliyuncs.com`），故 `network.allowedHosts`
-  需覆盖该域；CDN 域名变更时须同步更新白名单（出站域清单见 README §4）。
+- **成品视频从 MiniMax 侧 CDN 下载**（实测为 `*.aliyuncs.com`）。下载前 `downloadToFile` 会校验
+  远端 URL 的 host：代码侧白名单是**唯一可扩常量** `DOWNLOAD_HOST_SUFFIXES`（`lib/download-host.mjs`），
+  不在其内即拒绝并提示更新该常量；`manifest.json` 的 `network.allowedHosts`（出站放行，见 README §4）
+  需与之一同维护。CDN 域名变更时改这两处。
 - 单次 RPC 上限 30 秒：这是宿主进程间的硬约束，不是可以调优的参数。
 - **面板凭证状态恒为「已配置」**（`authType: none` 的设计代价）：「Token Plan 是否真的
   配好」由能力源探测透传为灰灯/提示，但面板上的「已配置」字样本身不反映真实凭证状态。

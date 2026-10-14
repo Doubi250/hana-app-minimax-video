@@ -359,7 +359,7 @@ test("所有出站请求显式声明 timeoutMs(≤30000) 与正整数 maxRespons
       return jsonResponse({ task_id: "t", status: "Success", file_id: "a", ...OK_ENVELOPE });
     }
     if (url.includes("/v1/files/retrieve")) {
-      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+      return jsonResponse({ file: { download_url: "https://v.aliyuncs.com/a.mp3" }, ...OK_ENVELOPE });
     }
     return binaryResponse(new Uint8Array([1, 2, 3]));
   };
@@ -425,9 +425,9 @@ test("CLI: 成功时末行严格为单行 JSON {ok:true,tasks,files}，退出码
       return jsonResponse({ task_id: "task-1", status: "Success", file_id: "audio-1", ...OK_ENVELOPE });
     }
     if (url.includes("/v1/files/retrieve?")) {
-      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+      return jsonResponse({ file: { download_url: "https://v.aliyuncs.com/a.mp3" }, ...OK_ENVELOPE });
     }
-    if (url.includes("cdn.example.com")) {
+    if (url.includes("aliyuncs.com")) {
       return binaryResponse(new Uint8Array([9, 8, 7, 6]));
     }
     throw new Error(`unexpected url ${url}`);
@@ -490,9 +490,9 @@ test("CLI: 切片部分失败时 ok:false 且退出码 1，成功片仍记录在
       return jsonResponse({ task_id: "task", status: "Success", file_id: "audio-1", ...OK_ENVELOPE });
     }
     if (url.includes("/v1/files/retrieve?")) {
-      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+      return jsonResponse({ file: { download_url: "https://v.aliyuncs.com/a.mp3" }, ...OK_ENVELOPE });
     }
-    if (url.includes("cdn.example.com")) return binaryResponse(new Uint8Array([1, 2, 3]));
+    if (url.includes("aliyuncs.com")) return binaryResponse(new Uint8Array([1, 2, 3]));
     throw new Error(`unexpected url ${url}`);
   };
 
