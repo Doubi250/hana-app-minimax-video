@@ -54,7 +54,9 @@
 - **成品视频从 MiniMax 侧 CDN 下载**（实测为 `*.aliyuncs.com`）。下载前 `downloadToFile` 会校验
   远端 URL 的 host：代码侧白名单是**唯一可扩常量** `DOWNLOAD_HOST_SUFFIXES`（`lib/download-host.mjs`），
   不在其内即拒绝并提示更新该常量；`manifest.json` 的 `network.allowedHosts`（出站放行，见 README §4）
-  需与之一同维护。CDN 域名变更时改这两处。
+  需与之一同维护。CDN 域名变更时改这两处。音频侧（`async-tts` 的 `download_url`）若 host 不在
+  `DOWNLOAD_HOST_SUFFIXES` 内，会**回落到 `files/retrieve_content`**（走已放行的 `api.minimax.cn`），
+  因此不影响取回；该回落有测试锁定。
 - 单次 RPC 上限 30 秒：这是宿主进程间的硬约束，不是可以调优的参数。
 - **面板凭证状态恒为「已配置」**（`authType: none` 的设计代价）：「Token Plan 是否真的
   配好」由能力源探测透传为灰灯/提示，但面板上的「已配置」字样本身不反映真实凭证状态。
