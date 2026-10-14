@@ -193,7 +193,7 @@ test("apply: registers minimax_context_ir — prompt enhancement only, async del
 });
 
 const { CONTEXT_IR_REF_LIMITS } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+  pathToFileURL(path.join(appRoot, "lib", "minimax", "context-ir-body.mjs"))
 );
 
 test("apply: multimodal parameters — single frame refs, capped lists, and the exclusion rule in the description", async () => {

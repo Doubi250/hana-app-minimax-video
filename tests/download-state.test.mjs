@@ -25,7 +25,7 @@ const { createMinimaxVideoAdapter, pruneDownloadStates } = await import(
   pathToFileURL(path.join(appRoot, "lib", "minimax-adapter.mjs"))
 );
 const { downloadStateKey, videoFileName } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+  pathToFileURL(path.join(appRoot, "lib", "minimax", "naming.mjs"))
 );
 
 const tempDirs = [];

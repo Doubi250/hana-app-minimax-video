@@ -7,16 +7,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  MODEL_SPECS,
   MAX_REFERENCE_FILE_BYTES,
-  buildCreateRequestBody,
-  buildCapabilitySnapshot,
-  extractBytes,
-  inferMode,
-  mimeForPath,
-  taskHash,
-  videoFileName,
-} from "../lib/minimax-api.mjs";
+} from "../lib/minimax/constants.mjs";
+import { MODEL_SPECS } from "../lib/minimax/model-catalog.mjs";
+import { buildCreateRequestBody } from "../lib/minimax/request-body.mjs";
+import { buildCapabilitySnapshot } from "../lib/snapshot.mjs";
+import { extractBytes, mimeForPath } from "../lib/minimax/reference-pipeline.mjs";
+import { inferMode } from "../lib/minimax/params.mjs";
+import { taskHash, videoFileName } from "../lib/minimax/naming.mjs";
 
 const H3 = MODEL_SPECS["MiniMax-H3"];
 const H3_MAX = MODEL_SPECS["MiniMax-H3-Max"];

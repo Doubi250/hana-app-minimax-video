@@ -21,7 +21,7 @@ import { pathToFileURL } from "node:url";
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const apply = (await import(pathToFileURL(path.join(appRoot, "index.mjs")))).apply;
 const { buildCapabilitySnapshot, throwLaneUnavailable } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+  pathToFileURL(path.join(appRoot, "lib", "snapshot.mjs"))
 );
 
 function hostStub({ credentialsResult }) {
