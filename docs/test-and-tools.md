@@ -11,8 +11,8 @@
 * **执行命令**：`npm test`（等价 `node --test`）
 * **门禁快捷命令**：`npm run check`（等价 `node scripts/check-clean.mjs`）
 * **新克隆启用钩子（每克隆一次）**：`git config core.hooksPath .githooks`——启用后 `pre-commit` 会在提交前跑脱机套件与合规扫描
-* **实测指标**：**<!-- test-count -->339<!-- /test-count --> / <!-- test-count -->339<!-- /test-count --> 全绿（100% 通过）**（全离线，不联网、不需 Key）；
-* **测试覆盖面（<!-- test-count -->339<!-- /test-count --> 项）**：
+* **实测指标**：**<!-- test-count -->401<!-- /test-count --> / <!-- test-count -->401<!-- /test-count --> 全绿（100% 通过）**（全离线，不联网、不需 Key）；
+* **测试覆盖面（<!-- test-count -->401<!-- /test-count --> 项）**：
   * 视频侧：请求体 / 参数归一化 43、下载状态机 9、Context-IR 请求体 26 与工具 18、2K 再生成提交 5、能力源探测 9、凭证 / 清单 16；
   * 语音侧：语音协议 10、语音客户端 13、TTS 工具 16、ASR 工具 16、音视频联动 2；
   * Studio 侧：Files 客户端 16、上传回落 11、上传上限 3、语音适配器 14、音色表 18、克隆扩展 15、异步 TTS 扩展 22、CLI 契约 10、CLI 脱敏单源与超时 10、http 工具 11、**发版流水线 26**。

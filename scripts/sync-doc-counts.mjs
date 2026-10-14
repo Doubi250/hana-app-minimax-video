@@ -11,7 +11,7 @@
  *   writer of the digits between them.
  *
  * THE MARKER (grep-locatable)
- *   <!-- test-count -->339<!-- /test-count -->
+ *   <!-- test-count -->N<!-- /test-count -->   (N = the live suite total)
  *   The number stays visible in rendered Markdown; the surrounding comments are
  *   invisible. `git grep -n 'test-count'` finds every guarded statement.
  *

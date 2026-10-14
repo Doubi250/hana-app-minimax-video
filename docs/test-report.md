@@ -11,7 +11,7 @@
 ## 测试步骤与结果
 
 1. **静态校验**：`validate_app.mjs --dir .` → **0 error / 0 warning**。
-2. **单元测试**：`node --test` → **<!-- test-count -->339<!-- /test-count -->/<!-- test-count -->339<!-- /test-count --> 通过**（视频侧 126 + 语音侧 57 + Studio 156）。
+2. **单元测试**：`node --test` → **<!-- test-count -->401<!-- /test-count -->/<!-- test-count -->401<!-- /test-count --> 通过**（视频侧 126 + 语音侧 57 + Studio 156）。
    全部离线，不需要 Key，不联网。视频侧：请求体 / 参数归一化 43 + 下载状态机 9 + Context-IR
    请求体 26 + Context-IR 工具 18 + 再生成提交 5 + 能力源探测 9 + 凭证 / 清单 16。语音侧：
    语音协议 10 + 语音客户端 13 + TTS 工具 16 + ASR 工具 16 + 音视频联动 2。Studio 新增：

@@ -14,4 +14,4 @@
 `scripts/pack-release.mjs`（12a 并行引入）；该脚本不在时配方见 [`docs/test-and-tools.md`](docs/test-and-tools.md) 与 VERIFY-REPORT 配方。**严禁从 worktree 目录直接打包**（`.git` 指针泄漏本机路径）。
 
 ## 测试
-`node --test` 跑全量（<!-- test-count -->339<!-- /test-count --> 项，全离线，不需 Key）。pre-commit 钩子已跑 `check-clean` + 全量。
+`node --test` 跑全量（<!-- test-count -->401<!-- /test-count --> 项，全离线，不需 Key）。pre-commit 钩子已跑 `check-clean` + 全量。
