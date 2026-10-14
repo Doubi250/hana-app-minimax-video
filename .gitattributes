@@ -1,2 +1,8 @@
 # Keep shell hooks LF so they run under POSIX sh on every platform.
 .githooks/* text eol=lf
+
+# Development-only files: excluded from release archives (`git archive` honours
+# export-ignore), so the install zip is unchanged by CI/config additions.
+package.json   export-ignore
+.github/       export-ignore
+.githooks/     export-ignore

@@ -347,6 +347,47 @@ test("pollTask: processing 后 Success，轮询间隔不低于查询下限", asy
 });
 
 /* ---------------------------------------------------------------- *
+ * 取回成品的 CDN 回落（ticket 10 / F3）：download_url 不在白名单时回落 retrieve_content
+ * ---------------------------------------------------------------- */
+
+test("fetchArtifacts: download_url 的 host 不在白名单内即回落 retrieve_content 取回音频", async () => {
+  // 夹具域名刻意取非白名单 host（DOWNLOAD_HOST_SUFFIXES 仅 ["*.aliyuncs.com"]）：
+  // downloadToFile 内的 assertDownloadHost 会拒绝它，fetchArtifacts 必须回落到
+  // files/retrieve_content（走已放行的 api.minimax.cn），音频流水线不硬断。
+  const retrievedBytes = [7, 7, 7, 7, 7];
+  const calls = [];
+  const mockFetch = async (url) => {
+    calls.push(url);
+    if (url.includes("/v1/files/retrieve_content?")) {
+      return binaryResponse(new Uint8Array(retrievedBytes));
+    }
+    if (url.includes("/v1/files/retrieve?")) {
+      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  const ext = createAsyncTtsExtension({ fetch: mockFetch, auth: { apiKey: "k" } });
+  const outDir = tmpDir();
+  const { audioFile } = await ext.fetchArtifacts({ fileId: "audio-1", outDir });
+
+  assert.ok(fs.existsSync(audioFile), "回落路径仍须落盘音频");
+  assert.deepEqual(
+    [...fs.readFileSync(audioFile)],
+    retrievedBytes,
+    "最终文件内容必须是 retrieve_content 返回的字节",
+  );
+  assert.ok(
+    calls.some((u) => u === `https://api.minimax.cn/v1/files/retrieve_content?file_id=audio-1`),
+    "必须经 retrieve_content（api.minimax.cn）取回",
+  );
+  assert.ok(
+    !calls.some((u) => u.includes("cdn.example.com")),
+    "非白名单的 download_url host 不得被请求",
+  );
+});
+
+/* ---------------------------------------------------------------- *
  * 出站预算
  * ---------------------------------------------------------------- */
 
@@ -359,7 +400,7 @@ test("所有出站请求显式声明 timeoutMs(≤30000) 与正整数 maxRespons
       return jsonResponse({ task_id: "t", status: "Success", file_id: "a", ...OK_ENVELOPE });
     }
     if (url.includes("/v1/files/retrieve")) {
-      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+      return jsonResponse({ file: { download_url: "https://v.aliyuncs.com/a.mp3" }, ...OK_ENVELOPE });
     }
     return binaryResponse(new Uint8Array([1, 2, 3]));
   };
@@ -425,9 +466,9 @@ test("CLI: 成功时末行严格为单行 JSON {ok:true,tasks,files}，退出码
       return jsonResponse({ task_id: "task-1", status: "Success", file_id: "audio-1", ...OK_ENVELOPE });
     }
     if (url.includes("/v1/files/retrieve?")) {
-      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+      return jsonResponse({ file: { download_url: "https://v.aliyuncs.com/a.mp3" }, ...OK_ENVELOPE });
     }
-    if (url.includes("cdn.example.com")) {
+    if (url.includes("aliyuncs.com")) {
       return binaryResponse(new Uint8Array([9, 8, 7, 6]));
     }
     throw new Error(`unexpected url ${url}`);
@@ -490,9 +531,9 @@ test("CLI: 切片部分失败时 ok:false 且退出码 1，成功片仍记录在
       return jsonResponse({ task_id: "task", status: "Success", file_id: "audio-1", ...OK_ENVELOPE });
     }
     if (url.includes("/v1/files/retrieve?")) {
-      return jsonResponse({ file: { download_url: "https://cdn.example.com/a.mp3" }, ...OK_ENVELOPE });
+      return jsonResponse({ file: { download_url: "https://v.aliyuncs.com/a.mp3" }, ...OK_ENVELOPE });
     }
-    if (url.includes("cdn.example.com")) return binaryResponse(new Uint8Array([1, 2, 3]));
+    if (url.includes("aliyuncs.com")) return binaryResponse(new Uint8Array([1, 2, 3]));
     throw new Error(`unexpected url ${url}`);
   };
 

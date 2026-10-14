@@ -20,7 +20,7 @@
 
 - **传输真相措辞（承接审计收敛）**：`docs/video-generation.md` §2 与 `skills/minimax-studio/SKILL.md` 中原「字节不进宿主 RPC」的措辞修正为如实表述——上传体仍以 `bodyBase64` 进 32MiB 的单条 RPC 信封（20MB 上限即按此算术设），上传真正买到的是字节从**模型请求体**挪进独立的 Files 调用、内联 data URL 预算不再约束、模型请求体保持小巧。
 - **CLI 缺省落点（承接审计收敛）**：`docs/test-and-tools.md` 与 `skills/minimax-studio/SKILL.md` 中 `ext-voice-clone.mjs` 的 `{data-dir}` 缺省说明由「脚本旁 `./.minimax-data`」更新为 `{HANA_HOME}/app-data/minimax-video`（与 App 运行时同一张表）。
-- **文档与契约对齐**：`docs/test-and-tools.md` 的用例计数由 281 同步为 **313**，两个 CLI 的调用示例与末行 JSON 契约按实际输出（`{"ok":true,"voice":{...}}` / `{"ok":true,"tasks":[...],"files":[...]}`）校正；`docs/audio-video-workflow.md` 的两个 CLI 示例改为位置参数形态。README 文档索引的测试计数同步为 313。
+- **文档与契约对齐**：`docs/test-and-tools.md` 的用例计数由 281 同步为 **339**，两个 CLI 的调用示例与末行 JSON 契约按实际输出（`{"ok":true,"voice":{...}}` / `{"ok":true,"tasks":[...],"files":[...]}`）校正；`docs/audio-video-workflow.md` 的两个 CLI 示例改为位置参数形态。README 文档索引的测试计数同步为 339。
 
 ### 测试
 

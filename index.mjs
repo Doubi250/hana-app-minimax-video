@@ -11,13 +11,12 @@
  * so `@hana/app-sdk` is never imported — everything comes from the `ctx` handed
  * to `apply`.
  */
+import { FALLBACK_PROVIDER_ID, PROVIDER_ID } from "./lib/minimax/constants.mjs";
 import {
-  FALLBACK_PROVIDER_ID,
-  PROVIDER_ID,
   TOKEN_PLAN_HINT,
   buildCapabilitySnapshot,
   throwLaneUnavailable,
-} from "./lib/minimax-api.mjs";
+} from "./lib/snapshot.mjs";
 import { createMinimaxVideoAdapter } from "./lib/minimax-adapter.mjs";
 import { createMinimaxSpeechAdapter } from "./lib/speech-adapter.mjs";
 import { createMinimaxContextIrTool } from "./lib/context-ir-tool.mjs";
@@ -148,6 +147,8 @@ export async function apply(ctx) {
         bus: ctx.bus,
         tasks: ctx.tasks,
         resources: ctx.resources,
+        // 在途任务簿的唯一落点；装载时读回并恢复轮询（重载不再丢任务）。
+        dataDir: ctx.dataDir,
       }),
     );
   } catch (error) {

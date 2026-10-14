@@ -25,7 +25,7 @@ const { createMinimaxVideoAdapter, pruneDownloadStates } = await import(
   pathToFileURL(path.join(appRoot, "lib", "minimax-adapter.mjs"))
 );
 const { downloadStateKey, videoFileName } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+  pathToFileURL(path.join(appRoot, "lib", "minimax", "naming.mjs"))
 );
 
 const tempDirs = [];
@@ -99,7 +99,7 @@ test("done lifecycle: one download, then cached successes, no re-download", asyn
   const dir = tempDir();
   const store = new Map();
   const { fetch, calls } = routingFetch({
-    tasks: { "remote-1": successTask("https://cdn.example/v.mp4") },
+    tasks: { "remote-1": successTask("https://v.aliyuncs.com/v.mp4") },
   });
   const adapter = makeAdapter({ fetch, downloadStore: store, dataDir: dir });
   const ctx = ctxFor("local-1", dir);
@@ -123,7 +123,7 @@ test("settled entries are reclaimed after the TTL (the leak fix)", async () => {
   const store = new Map();
   const { fetch } = routingFetch({
     tasks: {
-      "remote-1": successTask("https://cdn.example/v.mp4"),
+      "remote-1": successTask("https://v.aliyuncs.com/v.mp4"),
       "remote-2": pendingTask,
     },
   });
@@ -147,7 +147,7 @@ test("failed downloads exhaust their attempts and keep the failed answer within 
   const dir = tempDir();
   const store = new Map();
   const { fetch, calls } = routingFetch({
-    tasks: { "remote-1": successTask("https://cdn.example/v.mp4") },
+    tasks: { "remote-1": successTask("https://v.aliyuncs.com/v.mp4") },
     onDownload: () => {
       throw new Error("cdn down");
     },
@@ -182,7 +182,7 @@ test("a failed entry is reclaimed after the TTL like any settled one", async () 
   const store = new Map();
   const { fetch } = routingFetch({
     tasks: {
-      "remote-1": successTask("https://cdn.example/v.mp4"),
+      "remote-1": successTask("https://v.aliyuncs.com/v.mp4"),
       "remote-2": pendingTask,
     },
     onDownload: () => {
@@ -209,7 +209,7 @@ test("concurrent polls during one download never start a second one", async () =
     release = resolve;
   });
   const { fetch, calls } = routingFetch({
-    tasks: { "remote-1": successTask("https://cdn.example/v.mp4") },
+    tasks: { "remote-1": successTask("https://v.aliyuncs.com/v.mp4") },
     onDownload: async () => {
       await gate;
       const data = new TextEncoder().encode("minimax-video-bytes");
@@ -237,7 +237,7 @@ test("concurrent polls during one download never start a second one", async () =
 test("a file already on disk is republished without downloading", async () => {
   const dir = tempDir();
   const store = new Map();
-  const url = "https://cdn.example/v.mp4";
+  const url = "https://v.aliyuncs.com/v.mp4";
   const fileName = videoFileName({ localTaskId: "local-1", providerTaskId: "remote-1", url });
   fs.writeFileSync(path.join(dir, fileName), "already-here");
 

@@ -17,7 +17,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { buildContextIrRequestBody, RATIOS_NO_ADAPTIVE } from "../lib/minimax-api.mjs";
+import { RATIOS_NO_ADAPTIVE } from "../lib/minimax/constants.mjs";
+import { buildContextIrRequestBody } from "../lib/minimax/context-ir-body.mjs";
 import { createMinimaxClient } from "../lib/minimax-client.mjs";
 
 /* 1. request body -------------------------------------------------- */

@@ -41,7 +41,7 @@
 - [视频生成与 2K 工作流](docs/video-generation.md) — H3 视频模型规格、Files API 上传回落、2K 超分与 Context-IR 提示词增强
 - [语音合成与识别手册](docs/speech-and-audio.md) — 语音适配器协议、TTS 专有标记（停顿/情绪/拼音）与 ASR 传输门禁
 - [图音视全模态联动指南](docs/audio-video-workflow.md) — Studio Skill 调度架构与端到端音画制作流水线
-- [测试、验证与调试脚本](docs/test-and-tools.md) — 313 项单测报告、真机双通道注册记录与 5 个 CLI 独立脚本用法
+- [测试、验证与调试脚本](docs/test-and-tools.md) — <!-- test-count -->402<!-- /test-count --> 项单测报告、真机双通道注册记录与 7 个 CLI 独立脚本用法
 - [已知限制与物理边界](docs/known-limitations.md) — 30s 硬超时、32MiB RPC 信封与网络边界说明
 
 ---

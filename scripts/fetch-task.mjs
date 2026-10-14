@@ -17,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { API_BASE_URL, QUERY_PATH_PREFIX } from "../lib/minimax-api.mjs";
+import { API_BASE_URL, QUERY_PATH_PREFIX } from "../lib/minimax/constants.mjs";
 import { createMinimaxClient, downloadToFile } from "../lib/minimax-client.mjs";
 import { scrub } from "../lib/http-util.mjs";
 

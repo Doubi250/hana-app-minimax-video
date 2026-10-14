@@ -23,8 +23,11 @@
   受**单文件 ≤12MB** 预算约束（总量仍 ≤16MB）；超限时请改用 `source_task_id`
   （零字节上传）或压缩源视频。
 - **H3-Context-IR 增强工具是异步的**：调用立即返回「已提交」，增强提示词稍后自动
-  送达会话（后台轮询上限约 20 分钟，超时会明确报错）。**App 重载会中断在途轮询**——
-  重载后该次增强不会送达，需要重新提交。首 / 尾帧与参考素材互斥；本地素材沿用
+  送达会话（后台轮询上限约 20 分钟，超时会明确报错）。**在途轮询已持久化，重载后自动
+  恢复（凭证每轮重解析）**：任务一经远端接受即登记到 `{dataDir}/context-ir-pending.json`
+  （原子写 + 损坏备份重建），App 重载时读回并接续轮询，宿主任务不再悬挂；凭证每轮重新
+  从供应商 lane 解析，换 key 后恢复的任务仍能结算。已过期超过 24 小时的条目在恢复时
+  直接判失败并清出簿子（宿主任务不永久挂着）。首 / 尾帧与参考素材互斥；本地素材沿用
   ≤12MB / ≤16MB 传输预算，公网 URL 不占预算。
 - **下载依赖 CDN 支持 Range 分片**（8MB 一片）。服务器忽略 `Range` 时走整段下载，
   单次 RPC 仍受 30 秒限制 —— 大文件可能因此超时失败，可稍后重试。
@@ -48,8 +51,12 @@
   - 成品下载 URL（`download_url`）有约 **9 小时有效期**；过期后需重新取回（重新查询任务
     取新的 URL，或经 `files/retrieve_content` 直接取内容）。
   - 切片之间互不牵连：单片提交 / 轮询 / 取回失败只记在该片记录上，不影响其余片。
-- **成品视频从 MiniMax 侧 CDN 下载**（实测为 `*.aliyuncs.com`），故 `network.allowedHosts`
-  需覆盖该域；CDN 域名变更时须同步更新白名单（出站域清单见 README §4）。
+- **成品视频从 MiniMax 侧 CDN 下载**（实测为 `*.aliyuncs.com`）。下载前 `downloadToFile` 会校验
+  远端 URL 的 host：代码侧白名单是**唯一可扩常量** `DOWNLOAD_HOST_SUFFIXES`（`lib/download-host.mjs`），
+  不在其内即拒绝并提示更新该常量；`manifest.json` 的 `network.allowedHosts`（出站放行，见 README §4）
+  需与之一同维护。CDN 域名变更时改这两处。音频侧（`async-tts` 的 `download_url`）若 host 不在
+  `DOWNLOAD_HOST_SUFFIXES` 内，会**回落到 `files/retrieve_content`**（走已放行的 `api.minimax.cn`），
+  因此不影响取回；该回落有测试锁定。
 - 单次 RPC 上限 30 秒：这是宿主进程间的硬约束，不是可以调优的参数。
 - **面板凭证状态恒为「已配置」**（`authType: none` 的设计代价）：「Token Plan 是否真的
   配好」由能力源探测透传为灰灯/提示，但面板上的「已配置」字样本身不反映真实凭证状态。

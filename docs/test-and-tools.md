@@ -1,6 +1,6 @@
 # 测试、验证与独立脚本手册
 
-本文档汇总 MiniMax Studio 的自动化测试套件指标、实机真机验证记录，以及 `scripts/` 下 6 个独立命令行工具的调用规范。
+本文档汇总 MiniMax Studio 的自动化测试套件指标、实机真机验证记录，以及 `scripts/` 下 7 个独立命令行工具的调用规范。
 
 ---
 
@@ -8,12 +8,14 @@
 
 ### 1. 脱机单元测试套件
 套件包含完整的脱机单元测试，不依赖外部网络与实际 API Key：
-* **执行命令**：`node --test`
-* **实测指标**：**339 / 339 全绿（100% 通过）**（全离线，不联网、不需 Key）；
-* **测试覆盖面（339 项）**：
-  * 视频侧：请求体 / 参数归一化 43、下载状态机 9、Context-IR 请求体 26 与工具 18、2K 再生成提交 5、能力源探测 9、凭证 / 清单 16；
-  * 语音侧：语音协议 10、语音客户端 13、TTS 工具 16、ASR 工具 16、音视频联动 2；
-  * Studio 侧：Files 客户端 16、上传回落 11、上传上限 3、语音适配器 14、音色表 18、克隆扩展 15、异步 TTS 扩展 22、CLI 契约 10、CLI 脱敏单源与超时 10、http 工具 11、**发版流水线 26**。
+* **执行命令**：`npm test`（等价 `node --test`）
+* **门禁快捷命令**：`npm run check`（等价 `node scripts/check-clean.mjs`）
+* **新克隆启用钩子（每克隆一次）**：`git config core.hooksPath .githooks`——启用后 `pre-commit` 会在提交前跑脱机套件与合规扫描
+* **实测指标**：**<!-- test-count -->402<!-- /test-count --> / <!-- test-count -->402<!-- /test-count --> 全绿（100% 通过）**（视频侧 139 + 语音侧 57 + Studio 206）（全离线，不联网、不需 Key）；
+* **测试覆盖面（<!-- test-count -->402<!-- /test-count --> 项）**：
+  * 视频侧：请求体 / 参数归一化 43、下载状态机 9、Context-IR 请求体 26 与工具 28、2K 再生成提交 5、能力源探测 9、凭证 / 清单 19（合计 139）；
+  * 语音侧：语音协议 10、语音客户端 13、TTS 工具 16、ASR 工具 16、音视频联动 2（合计 57）；
+  * Studio 侧：Files 客户端 16、上传回落 11、上传上限 3、语音适配器 14、音色表 18、克隆扩展 15、异步 TTS 扩展 23、CLI 契约 10、CLI 脱敏单源与超时 10、http 工具 27、**发版流水线 26**、在途任务簿 14、下载 host 校验 12、轮询退避 7（合计 206）。
 
 ### 2. 宿主实机接入核验
 * **媒体双通道登记**：宿主 `media_describe-options` 命令成功枚举 `video`（H3/H3-Max）与 `speech`（2.8-HD/2.8-Turbo）；
@@ -25,7 +27,7 @@
 
 ## 第二部分：独立 CLI 脚本（`scripts/`）
 
-套件在安装包中附带了 6 个独立 Node 命令行脚本，用于脱机流水线调度与运维调试。脚本均接入了统一安全脱敏与 `AbortSignal.timeout` 真实超时拦截。
+套件在安装包中附带了 7 个独立 Node 命令行脚本，用于脱机流水线调度与运维调试。脚本均接入了统一安全脱敏与 `AbortSignal.timeout` 真实超时拦截。
 
 ### 1. `scripts/ext-voice-clone.mjs`（声音克隆与入库）
 * **用途**：本地样本预检、云端提取声音表征、并将新音色写入持久化音色表；
@@ -74,3 +76,15 @@
   * 退出码：成功为 `0`，任一步失败为 `1`（打印失败步与原因，每步失败即停）；
   * 末行输出单行 JSON：成功 `{"ok":true,"zip":…,"bytes":…,"sha256":…,"entries":…,"entryJson":…,"scan":"clean","bundle":…,"bundleSha256":…,"commits":N}`；失败 `{"ok":false,"failedStep":…,"error":{"code","message"}}`。
 * **冒烟运行时**：`validate-app.mjs --smoke` 需宿主 Node ≥ 26。脚本按 `env HANA_NODE_RUNTIME` > `{HANA_HOME}/.cache/node-runtime/*` 的顺序解析并透传；宿主缓存运行时缺失时，直接以 `HANA_NODE_RUNTIME` 指向平台的 Node ≥ 26 即可。
+
+### 7. `scripts/sync-doc-counts.mjs`（文档测试计数守卫）
+* **用途**：文档里的单测数量由脚本拥有——跑一次 `node --test` 取真实总数，回写全部 `<!-- test-count -->N<!-- /test-count -->` 占位标记，使“手改计数”不再可能；`--check` 只校验不写入，计数漂移即退出码非 0。
+* **调用示例**：
+  ```bash
+  node scripts/sync-doc-counts.mjs            # 用真实总数回写全部占位标记
+  node scripts/sync-doc-counts.mjs --check    # 只校验；有漂移退出码 1
+  ```
+* **标记形态**：`<!-- test-count -->N<!-- /test-count -->`（N 为真实总数，渲染时数字可见、注释不可见；`git grep -n 'test-count'` 可精确定位）。
+* **退出码与输出契约**：退出码成功 `0`、漂移 `1`、环境错 `2`；末行输出单行 JSON（`{"ok":true,"total":N,"source":…,"markers":N,…}`）。
+* **版本容错**：`json` 测试报告器并非每个 Node 构建都提供（本地某些构建只有 `default/dot/junit/lcov/spec/tap`），脚本探测 `node:test/reporters`、优先 `json`、缺则回落 `tap`（再备 `spec`）。
+* 已接入 `.githooks/pre-commit` 与 CI（`node scripts/sync-doc-counts.mjs --check`）。
