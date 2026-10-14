@@ -10,7 +10,9 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCreateRequestBody, MODEL_SPECS, MAX_UPLOAD_FILE_BYTES } from "../lib/minimax-api.mjs";
+import { MAX_UPLOAD_FILE_BYTES } from "../lib/minimax/constants.mjs";
+import { MODEL_SPECS } from "../lib/minimax/model-catalog.mjs";
+import { buildCreateRequestBody } from "../lib/minimax/request-body.mjs";
 
 const H3 = MODEL_SPECS["MiniMax-H3"];
 

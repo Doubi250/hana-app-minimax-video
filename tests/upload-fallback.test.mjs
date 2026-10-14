@@ -14,7 +14,8 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCreateRequestBody, MODEL_SPECS } from "../lib/minimax-api.mjs";
+import { MODEL_SPECS } from "../lib/minimax/model-catalog.mjs";
+import { buildCreateRequestBody } from "../lib/minimax/request-body.mjs";
 import { createMinimaxVideoAdapter } from "../lib/minimax-adapter.mjs";
 
 const H3 = MODEL_SPECS["MiniMax-H3"];

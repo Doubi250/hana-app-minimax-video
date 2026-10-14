@@ -18,9 +18,9 @@ import {
   API_BASE_URL,
   CREATE_PATH,
   QUERY_PATH_PREFIX,
-  MODEL_SPECS,
-  buildCreateRequestBody,
-} from "../lib/minimax-api.mjs";
+} from "../lib/minimax/constants.mjs";
+import { MODEL_SPECS } from "../lib/minimax/model-catalog.mjs";
+import { buildCreateRequestBody } from "../lib/minimax/request-body.mjs";
 import { scrub } from "../lib/http-util.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

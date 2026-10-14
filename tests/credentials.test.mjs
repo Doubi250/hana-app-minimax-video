@@ -16,7 +16,7 @@ import {
   resolveCredentialAuth,
   usableAuth,
 } from "../lib/auth.mjs";
-import { buildCapabilitySnapshot } from "../lib/minimax-api.mjs";
+import { buildCapabilitySnapshot } from "../lib/snapshot.mjs";
 import { createMinimaxClient } from "../lib/minimax-client.mjs";
 
 /* 1. usableAuth ----------------------------------------------------- */

@@ -29,7 +29,7 @@ const { createMinimaxSpeechAdapter } = await import(
   pathToFileURL(path.join(appRoot, "lib", "speech-adapter.mjs"))
 );
 const { buildCapabilitySnapshot } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+  pathToFileURL(path.join(appRoot, "lib", "snapshot.mjs"))
 );
 const { registerVoice } = await import(
   pathToFileURL(path.join(appRoot, "lib", "voice-registry.mjs"))

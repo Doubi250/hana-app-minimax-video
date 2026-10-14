@@ -29,8 +29,14 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const { createTtsTool } = await import(
   pathToFileURL(path.join(appRoot, "lib", "tts-tool.mjs"))
 );
-const { buildCreateRequestBody, buildContextIrRequestBody, MODEL_SPECS } = await import(
-  pathToFileURL(path.join(appRoot, "lib", "minimax-api.mjs"))
+const { buildCreateRequestBody } = await import(
+  pathToFileURL(path.join(appRoot, "lib", "minimax", "request-body.mjs"))
+);
+const { buildContextIrRequestBody } = await import(
+  pathToFileURL(path.join(appRoot, "lib", "minimax", "context-ir-body.mjs"))
+);
+const { MODEL_SPECS } = await import(
+  pathToFileURL(path.join(appRoot, "lib", "minimax", "model-catalog.mjs"))
 );
 
 const AUDIO_BYTES = Buffer.from("synthesised-voice-bytes");
