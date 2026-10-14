@@ -161,7 +161,18 @@ test("B2: timeoutMs = 1234 时信号在约 1.2 秒内中止", async () => {
   let captured;
   const neverResolves = (url, init) => {
     captured = init;
-    return new Promise(() => {}); // 模拟假死
+    // 模拟假死，但感知 abort：超时信号中止时立即结算，不留永久悬挂的 Promise。
+    // 调用侧已挂 `pending.catch(() => {})`，故 reject 不产生未处理拒绝。
+    return new Promise((_resolve, reject) => {
+      const settle = () => reject(new Error("aborted"));
+      if (init?.signal) {
+        if (init.signal.aborted) {
+          settle();
+          return;
+        }
+        init.signal.addEventListener("abort", settle, { once: true });
+      }
+    });
   };
   const wrapped = withTimeout(neverResolves, 30000);
 
@@ -172,9 +183,28 @@ test("B2: timeoutMs = 1234 时信号在约 1.2 秒内中止", async () => {
   assert.ok(captured.signal instanceof AbortSignal);
   assert.equal(captured.signal.aborted, false);
 
-  await new Promise((resolve) => {
+  // Node 20/22（Linux 与 Windows 构建皆然）里 `AbortSignal.timeout` 的内部计时器是 unref 的，
+  // 撑不住事件循环：单 await 它会在 abort 触发之前就收尾，报
+  // 'Promise resolution is still pending but the event loop has already resolved'
+  // （ERR_TEST_FAILURE / cancelledByParent，并连带取消同文件后续用例——即 CI 上那 5 个 cancelled）。
+  // 这里用一个有界、ref 的计时器托住循环（真实假死的网络请求靠 socket 达到同一效果），
+  // abort 触发即 clearTimeout；若 abort 永不触发，则 8s 后确定性失败，绝不永久悬挂。
+  const aborted = new Promise((resolve) => {
     captured.signal.addEventListener("abort", resolve, { once: true });
   });
+  let safetyCap;
+  const cap = new Promise((_resolve, reject) => {
+    safetyCap = setTimeout(
+      () => reject(new Error("init.signal 在 8s 内未 abort——假死未被兑现")),
+      8000,
+    );
+  });
+
+  try {
+    await Promise.race([aborted, cap]);
+  } finally {
+    clearTimeout(safetyCap);
+  }
 
   const elapsed = Date.now() - started;
   assert.equal(captured.signal.aborted, true);
