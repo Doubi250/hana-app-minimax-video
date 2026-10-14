@@ -1,0 +1,31 @@
+# Quality gate that travels with the repository.
+#
+# The full offline unit suite and the machine-specific leak scan run on every
+# push and pull request, so a fresh clone gets the same gate the author runs
+# locally. No dependencies are installed: the suite is `node --test` against
+# the checked-in sources, and the scan is plain Node too. A green run here is
+# a repository fact, not a local-machine fact.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Offline unit suite
+        run: npm test
+      - name: Machine-specific leak scan
+        run: npm run check
